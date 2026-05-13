@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CSSProperties } from "react";
 
 export default function Home() {
   return (
@@ -37,7 +38,7 @@ export default function Home() {
   );
 }
 
-const styles = {
+const styles: Record<string, CSSProperties> = {
   container: {
     minHeight: "100vh",
     background: "#f5f5f5",
