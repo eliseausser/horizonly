@@ -6,36 +6,31 @@ import { supabase } from "@/lib/supabase";
 
 export default function Dashboard() {
   const router = useRouter();
-
   const [loading, setLoading] = useState(true);
-
-  // 🔴 IMPORTANT : on ne peut PAS faire "await" ici
-  // const { data: user } = await supabase.auth.getUser() ❌ supprimé
 
   useEffect(() => {
     async function load() {
-      // récupérer session utilisateur
-      const { data: { session } } = await supabase.auth.getSession();
+      // récupérer user connecté
+      const { data: user } = await supabase.auth.getUser();
 
-      // si pas connecté → redirection login
-      if (!session) {
+      // récupérer session
+      const { data } = await supabase.auth.getSession();
+
+      if (!data.session) {
         router.push("/login");
-        return;
+      } else {
+        setLoading(false);
       }
-
-      setLoading(false);
     }
 
     load();
   }, [router]);
 
-  // fonction logout
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
   }
 
-  // loading screen
   if (loading) return <p>Chargement...</p>;
 
   return (
