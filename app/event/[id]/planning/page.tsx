@@ -6,8 +6,15 @@ import { supabase } from "@/lib/supabase";
 
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  DragOverlay,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
 } from "@dnd-kit/core";
 
 import {
@@ -26,32 +33,29 @@ export default function Planning() {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activityTitle, setActivityTitle] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [activeActivity, setActiveActivity] = useState<any | null>(null);
+  const [activeDragType, setActiveDragType] = useState<string | null>(null);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [view, setView] = useState<"list" | "timeline" | "gantt">("list");
+  const [activityTitle, setActivityTitle] = useState("");
+  const [activityStart, setActivityStart] = useState("");
+  const [activityEnd, setActivityEnd] = useState("");
 
-  // ✅ EDIT STATE
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [editDate, setEditDate] = useState("");
   const [editStart, setEditStart] = useState("");
   const [editEnd, setEditEnd] = useState("");
+const [activityType, setActivityType] = useState("activite");
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
 
   useEffect(() => {
     loadData();
   }, [id]);
-
-  useEffect(() => {
-    if (!editingId) {
-      setEditTitle("");
-      setEditDate("");
-      setEditStart("");
-      setEditEnd("");
-    }
-  }, [editingId]);
 
   async function loadData() {
     const { data: daysData } = await supabase
@@ -60,111 +64,309 @@ export default function Planning() {
       .eq("event_id", id)
       .order("day_number", { ascending: true });
 
-    setDays(daysData || []);
-
     const { data: activitiesData } = await supabase
       .from("activities")
       .select("*")
       .order("position", { ascending: true });
 
+    setDays(daysData || []);
     setActivities(activitiesData || []);
     setLoading(false);
   }
 
+  function resetDrag() {
+    setActiveActivity(null);
+    setActiveDragType(null);
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const type = event.active.data.current?.type || null;
+    setActiveDragType(type);
+
+    const activity = activities.find((a) => a.id === event.active.id);
+    setActiveActivity(activity || null);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    return;
+  }
+
+async function handleDragEnd(event: DragEndEvent) {
+  const { active, over } = event;
+
+  if (!over) {
+    resetDrag();
+    return;
+  }
+
+  const activeId = active.id;
+  const overId = over.id;
+
+  const activeType = active.data.current?.type;
+  const overType = over.data.current?.type;
+
+  // =========================
+  // DRAG DES JOURS
+  // =========================
+  if (activeType === "day") {
+    const overDayId =
+      overType === "day" ? overId : over.data.current?.dayId;
+
+    if (!overDayId) {
+      resetDrag();
+      return;
+    }
+
+    const oldIndex = days.findIndex((d) => d.id === activeId);
+    const newIndex = days.findIndex((d) => d.id === overDayId);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      resetDrag();
+      return;
+    }
+
+    const newDays = arrayMove(days, oldIndex, newIndex);
+    setDays(newDays);
+
+const results = await Promise.all(
+  newDays.map((day, index) =>
+    supabase
+      .from("event_days")
+      .update({ day_number: index + 1 })
+      .eq("id", day.id)
+  )
+);
+
+const hasError = results.some((r) => r.error);
+
+if (hasError) {
+  console.error("drag days update error:", results);
+  resetDrag();
+  return;
+}
+
+resetDrag();
+await loadData();
+return;
+  }
+
+  // =========================
+  // DRAG DES ACTIVITÉS
+  // =========================
+  if (activeType === "activity") {
+    const activeActivity = activities.find((a) => a.id === activeId);
+    if (!activeActivity) {
+      resetDrag();
+      return;
+    }
+
+    const overActivity = activities.find((a) => a.id === overId);
+    const overDayId = over.data.current?.dayId;
+
+    const sourceDayId = activeActivity.day_id;
+    const targetDayId = overActivity
+      ? overActivity.day_id
+      : overDayId || sourceDayId;
+
+    const sourceActivities = activities
+      .filter((a) => a.day_id === sourceDayId && a.id !== activeId)
+      .sort((a, b) => a.position - b.position);
+
+    const targetActivities =
+      sourceDayId === targetDayId
+        ? sourceActivities
+        : activities
+            .filter((a) => a.day_id === targetDayId)
+            .sort((a, b) => a.position - b.position);
+
+    let insertIndex = targetActivities.length;
+
+    if (overActivity) {
+      insertIndex = targetActivities.findIndex((a) => a.id === overId);
+      if (insertIndex === -1) insertIndex = targetActivities.length;
+    }
+
+    const movedActivity = {
+      ...activeActivity,
+      day_id: targetDayId,
+    };
+
+    const newTargetActivities = [
+      ...targetActivities.slice(0, insertIndex),
+      movedActivity,
+      ...targetActivities.slice(insertIndex),
+    ].map((activity, index) => ({
+      ...activity,
+      position: index,
+    }));
+
+    const newSourceActivities =
+      sourceDayId === targetDayId
+        ? []
+        : sourceActivities.map((activity, index) => ({
+            ...activity,
+            position: index,
+          }));
+
+    const updatedActivities = activities.map((activity) => {
+      const updatedTarget = newTargetActivities.find(
+        (a) => a.id === activity.id
+      );
+
+      const updatedSource = newSourceActivities.find(
+        (a) => a.id === activity.id
+      );
+
+      return updatedTarget || updatedSource || activity;
+    });
+
+    setActivities(updatedActivities);
+
+const results = await Promise.all(
+  updatedActivities.map((activity) =>
+    supabase
+      .from("activities")
+      .update({
+        day_id: activity.day_id,
+        position: activity.position,
+      })
+      .eq("id", activity.id)
+  )
+);
+
+const hasError = results.some((r) => r.error);
+
+if (hasError) {
+  console.error("drag activities update error:", results);
+  resetDrag();
+  return;
+}
+
+resetDrag();
+await loadData();
+  }
+}
+
   async function addDay() {
-    await supabase.from("event_days").insert([
+    const { error } = await supabase.from("event_days").insert([
       {
         event_id: id,
         day_number: days.length + 1,
       },
     ]);
 
+    if (error) {
+      console.error("addDay error:", error.message);
+      return;
+    }
+
     await loadData();
   }
 
-  async function addActivity(dayId: string) {
-    if (!activityTitle) return;
-
-    const { data, error } = await supabase
-      .from("activities")
-      .insert([
-        {
-          day_id: dayId,
-          title: activityTitle,
-          start_time: startTime || null,
-          end_time: endTime || null,
-          position: activities.length,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) return console.error(error.message);
-
-    setActivities((prev) => [...prev, data]);
-
-    setActivityTitle("");
-    setStartTime("");
-    setEndTime("");
-    setSelectedDay(null);
+  async function deleteDay(dayId: string) {
+    await supabase.from("activities").delete().eq("day_id", dayId);
+    await supabase.from("event_days").delete().eq("id", dayId);
+    await loadData();
   }
 
-  async function deleteActivity(activityId: string) {
+async function addActivity(dayId: string) {
+  console.log("CREATE CLICKED", {
+    dayId,
+    activityTitle,
+    activityType,
+    activityStart,
+    activityEnd,
+  });
+
+  if (!activityTitle.trim()) {
+    console.log("Titre manquant");
+    return;
+  }
+
+  const { data: currentActivities, error: readError } = await supabase
+    .from("activities")
+    .select("*")
+    .eq("day_id", dayId);
+
+  if (readError) {
+    console.error("read activities error:", readError);
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("activities")
+    .insert([
+      {
+        day_id: dayId,
+        title: activityTitle,
+        type: activityType,
+        start_time: activityStart || null,
+        end_time: activityEnd || null,
+        position: currentActivities?.length || 0,
+      },
+    ])
+    .select();
+
+  if (error) {
+    console.error("addActivity error:", error);
+    return;
+  }
+
+  console.log("activity created:", data);
+
+  setActivityTitle("");
+  setActivityStart("");
+  setActivityEnd("");
+  setActivityType("activite");
+  setSelectedDay(null);
+
+  await loadData();
+}
+
+async function deleteActivity(activityId: string) {
+  try {
+    console.log("DELETE ACTIVITY:", activityId);
+
     const { error } = await supabase
       .from("activities")
       .delete()
       .eq("id", activityId);
 
-    if (error) return console.error(error.message);
+    if (error) {
+      console.error("deleteActivity Supabase error:", error);
+      return;
+    }
 
-    setActivities((prev) =>
-      prev.filter((a) => a.id !== activityId)
-    );
+    await loadData();
+  } catch (err) {
+    console.error("deleteActivity fetch error:", err);
+  }
+}
+
+async function updateActivity(activityId: string) {
+  if (!editTitle.trim()) return;
+
+  const { error } = await supabase
+    .from("activities")
+    .update({
+      title: editTitle,
+      start_time: editStart || null,
+      end_time: editEnd || null,
+    })
+    .eq("id", activityId);
+
+  if (error) {
+    console.error("updateActivity error:", error.message);
+    return;
   }
 
-  async function updateActivity(activityId: string, payload: any) {
-    const { data, error } = await supabase
-      .from("activities")
-      .update(payload)
-      .eq("id", activityId)
-      .select()
-      .single();
+  setEditingActivityId(null);
+  setEditTitle("");
+  setEditStart("");
+  setEditEnd("");
 
-    if (error) return console.error(error.message);
-
-    setActivities((prev) =>
-      prev.map((a) => (a.id === activityId ? data : a))
-    );
-  }
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = activities.findIndex((a) => a.id === active.id);
-    const newIndex = activities.findIndex((a) => a.id === over.id);
-
-    const newArray = arrayMove(activities, oldIndex, newIndex);
-
-    setActivities(newArray);
-
-    await Promise.all(
-      newArray.map((activity, index) =>
-        supabase
-          .from("activities")
-          .update({ position: index })
-          .eq("id", activity.id)
-      )
-    );
-  }
-
-  const hourToPx = (time: string) => {
-    if (!time) return 0;
-    const [h, m] = time.split(":").map(Number);
-    if (isNaN(h) || isNaN(m)) return 0;
-    return h * 60 + m;
-  };
+  await loadData();
+}
 
   if (loading) return <p>Chargement...</p>;
 
@@ -172,174 +374,263 @@ export default function Planning() {
     <div style={{ padding: 20 }}>
       <h1>📅 Planning</h1>
 
-      <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={() => setView("list")} style={btn}>List</button>
-        <button onClick={() => setView("timeline")} style={btn}>Timeline</button>
-        <button onClick={() => setView("gantt")} style={btn}>Gantt</button>
-      </div>
+      <button onClick={addDay} style={btn}>
+        + Ajouter un jour
+      </button>
 
-      <button onClick={addDay} style={btn}>+ Ajouter un jour</button>
-
-      {/* LIST */}
-      {view === "list" && (
-        <>
-          {days.map((day) => {
-            const dayActivities = activities.filter(
-              (a) => a.day_id === day.id
-            );
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={days.map((d) => d.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {days.map((day, index) => {
+            const dayActivities = activities
+              .filter((a) => a.day_id === day.id)
+              .sort((a, b) => a.position - b.position);
 
             return (
-              <div key={day.id} style={card}>
-                <h3>Jour {day.day_number}</h3>
-
-                <DndContext
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
+              <SortableDay key={day.id} id={day.id}>
+                <DayContainer
+                  dayId={day.id}
+                  disabled={activeDragType === "day"}
                 >
-                  <SortableContext
-                    items={dayActivities.map((a) => a.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {dayActivities.map((act) => (
-                      <SortableItem
-                        key={act.id}
-                        activity={act}
-                        onDelete={deleteActivity}
-                        onUpdate={updateActivity}
-                        editingId={editingId}
-                        setEditingId={setEditingId}
-                        editTitle={editTitle}
-                        setEditTitle={setEditTitle}
-                        editDate={editDate}
-                        setEditDate={setEditDate}
-                        editStart={editStart}
-                        setEditStart={setEditStart}
-                        editEnd={editEnd}
-                        setEditEnd={setEditEnd}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
+                  <div style={card}>
+                    <h3>Jour {index + 1}</h3>
 
-                <button
-                  onClick={() => setSelectedDay(day.id)}
-                  style={smallBtn}
-                >
-                  + activité
-                </button>
+                    <SortableContext
+                      items={dayActivities.map((a) => a.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {dayActivities.map((act) => (
+                        <SortableItem
+  key={act.id}
+  activity={act}
+  editingActivityId={editingActivityId}
+  setEditingActivityId={setEditingActivityId}
+  editTitle={editTitle}
+  setEditTitle={setEditTitle}
+  editStart={editStart}
+  setEditStart={setEditStart}
+  editEnd={editEnd}
+  setEditEnd={setEditEnd}
+  updateActivity={updateActivity}
+  deleteActivity={deleteActivity}
+/>
+                      ))}
+                    </SortableContext>
 
-                {selectedDay === day.id && (
-                  <div style={{ marginTop: 10 }}>
-                    <input
-                      placeholder="Titre"
-                      value={activityTitle}
-                      onChange={(e) => setActivityTitle(e.target.value)}
-                      style={input}
-                    />
+<button
+  onClick={() =>
+    setSelectedDay(selectedDay === day.id ? null : day.id)
+  }
+  style={btn}
+>
+  Ajouter une activité
+</button>
 
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      style={input}
-                    />
+{selectedDay === day.id && (
+  <div style={formBox}>
+    <input
+      placeholder="Titre de l'activité"
+      value={activityTitle}
+      onChange={(e) => setActivityTitle(e.target.value)}
+      style={input}
+    />
 
-                    <input
-                      type="time"
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      style={input}
-                    />
+    <input
+      type="time"
+      value={activityStart}
+      onChange={(e) => setActivityStart(e.target.value)}
+      style={input}
+    />
 
-                    <button onClick={() => addActivity(day.id)} style={btn}>
-                      Ajouter
+    <input
+      type="time"
+      value={activityEnd}
+      onChange={(e) => setActivityEnd(e.target.value)}
+      style={input}
+    />
+
+<select
+  value={activityType}
+  onChange={(e) => setActivityType(e.target.value)}
+  style={input}
+>
+  <option value="activite">Activité</option>
+  <option value="rdv">RDV</option>
+  <option value="evenement">Événement</option>
+</select>
+
+    <button onClick={() => addActivity(day.id)} style={btn}>
+      Créer
+    </button>
+  </div>
+)}
+
+                    <button
+                      onClick={() => deleteDay(day.id)}
+                      style={{ ...btn, background: "red" }}
+                    >
+                      supprimer jour
                     </button>
                   </div>
-                )}
-              </div>
+                </DayContainer>
+              </SortableDay>
             );
           })}
-        </>
-      )}
+        </SortableContext>
+
+        <DragOverlay>
+          {activeActivity ? (
+            <div style={dragOverlayCard}>{activeActivity.title}</div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
 
-/* ================= SORTABLE ITEM ================= */
+function DayContainer({ dayId, disabled, children }: any) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-drop-${dayId}`,
+    disabled,
+    data: {
+      type: "day-drop",
+      dayId,
+    },
+  });
 
-function SortableItem({
-  activity,
-  onDelete,
-  onUpdate,
-  editingId,
-  setEditingId,
-  editTitle,
-  setEditTitle,
-  editDate,
-  setEditDate,
-  editStart,
-  setEditStart,
-  editEnd,
-  setEditEnd,
-}: any) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id: activity.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        minHeight: 120,
+        padding: 10,
+        marginTop: 10,
+        borderRadius: 10,
+        background: isOver ? "#e3f2fd" : "white",
+        border: "1px solid #ddd",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
-  const isEditing = editingId === activity.id;
+function SortableDay({ id, children }: any) {
+  const { setNodeRef, attributes, listeners, transform, transition } =
+    useSortable({
+      id,
+      data: { type: "day" },
+    });
 
   return (
     <div
       ref={setNodeRef}
       style={{
         transform: CSS.Transform.toString(transform),
-        transition,
+        transition: transition || "transform 200ms ease",
+      }}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        style={{
+          cursor: "grab",
+          padding: 8,
+          background: "#eee",
+          marginTop: 10,
+          borderRadius: 6,
+        }}
+      >
+        ☰ Jour
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+function SortableItem({
+  activity,
+  editingActivityId,
+  setEditingActivityId,
+  editTitle,
+  setEditTitle,
+  editStart,
+  setEditStart,
+  editEnd,
+  setEditEnd,
+  updateActivity,
+  deleteActivity,
+}: any) {
+  const { setNodeRef, attributes, listeners, transform, transition } =
+    useSortable({
+      id: activity.id,
+      data: { type: "activity" },
+    });
+
+  const isEditing = editingActivityId === activity.id;
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: transition || "transform 200ms ease",
         padding: 10,
-        marginTop: 5,
-        background: "#f5f5f5",
+        marginTop: 8,
+        background: "#f2f2f2",
         borderRadius: 8,
       }}
-      {...attributes}
     >
-      <div {...listeners}>
-        ⏰ {activity.start_time || "--"} → {activity.end_time || "--"} |{" "}
-        {activity.title}
-      </div>
+<div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  }}
+>
+  <div {...listeners} style={{ cursor: "grab", flex: 1 }}>
+    ⏰ {activity.start_time || "--"} → {activity.end_time || "--"} |{" "}
+    {activity.title}
+  </div>
 
-      <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-        <button
-          style={smallBtn}
-          onClick={() => {
-            setEditingId(activity.id);
-            setEditTitle(activity.title || "");
-            setEditDate(activity.date || "");
-            setEditStart(activity.start_time || "");
-            setEditEnd(activity.end_time || "");
-          }}
-        >
-          ✏️ Edit
-        </button>
+  <div style={{ display: "flex", gap: 8 }}>
+    <button
+      style={smallBtn}
+      onClick={() => {
+        setEditingActivityId(activity.id);
+        setEditTitle(activity.title || "");
+        setEditStart(activity.start_time || "");
+        setEditEnd(activity.end_time || "");
+      }}
+    >
+      Modifier
+    </button>
 
-        <button
-          style={{ ...smallBtn, background: "red", color: "white" }}
-          onClick={() => onDelete(activity.id)}
-        >
-          Delete
-        </button>
-      </div>
+    <button
+      style={{ ...smallBtn, background: "red", color: "white" }}
+      onClick={() => deleteActivity(activity.id)}
+    >
+      Supprimer
+    </button>
+  </div>
+</div>
 
-      {/* EDIT FORM */}
       {isEditing && (
-        <div style={{ marginTop: 10 }}>
+        <div style={formBox}>
           <input
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
-            style={input}
-          />
-
-          <input
-            type="date"
-            value={editDate}
-            onChange={(e) => setEditDate(e.target.value)}
             style={input}
           />
 
@@ -357,25 +648,15 @@ function SortableItem({
             style={input}
           />
 
-          <button
-            style={btn}
-            onClick={() =>
-              onUpdate(activity.id, {
-                title: editTitle,
-                date: editDate,
-                start_time: editStart,
-                end_time: editEnd,
-              }).then(() => setEditingId(null))
-            }
-          >
-            Save
+          <button onClick={() => updateActivity(activity.id)} style={btn}>
+            Enregistrer
           </button>
 
           <button
+            onClick={() => setEditingActivityId(null)}
             style={smallBtn}
-            onClick={() => setEditingId(null)}
           >
-            Cancel
+            Annuler
           </button>
         </div>
       )}
@@ -383,13 +664,12 @@ function SortableItem({
   );
 }
 
-/* ================= STYLES ================= */
-
 const card = {
   border: "1px solid #ddd",
   padding: 15,
   marginTop: 10,
   borderRadius: 10,
+  background: "white",
 };
 
 const btn = {
@@ -398,18 +678,36 @@ const btn = {
   color: "white",
   border: "none",
   borderRadius: 8,
+  marginTop: 10,
 };
 
-const smallBtn = {
-  padding: "5px 10px",
-  marginTop: 10,
-  border: "1px solid #ddd",
-  borderRadius: 6,
+const dragOverlayCard = {
+  padding: 10,
+  background: "#111",
+  color: "white",
+  borderRadius: 8,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+  cursor: "grabbing",
+  opacity: 0.95,
 };
 
 const input = {
   display: "block",
-  marginTop: 10,
   padding: 8,
-  width: 200,
+  marginTop: 8,
+  width: 220,
+};
+
+const formBox = {
+  marginTop: 10,
+  padding: 10,
+  background: "#fafafa",
+  borderRadius: 8,
+};
+
+const smallBtn = {
+  padding: "6px 10px",
+  border: "1px solid #ddd",
+  borderRadius: 6,
+  cursor: "pointer",
 };
