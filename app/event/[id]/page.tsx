@@ -9,6 +9,7 @@ export default function EventOverview() {
 
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+const [todayTasks, setTodayTasks] = useState<any[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -23,6 +24,35 @@ export default function EventOverview() {
         setLoading(false);
         return;
       }
+const todayDate = new Date();
+const today =
+  todayDate.getFullYear() +
+  "-" +
+  String(todayDate.getMonth() + 1).padStart(2, "0") +
+  "-" +
+  String(todayDate.getDate()).padStart(2, "0");
+
+const { data: listsData } = await supabase
+  .from("todo_lists")
+  .select("id")
+  .eq("event_id", id);
+
+const listIds = listsData?.map((list) => list.id) || [];
+
+if (listIds.length > 0) {
+  const { data: tasksData, error: tasksError } = await supabase
+    .from("todo_tasks")
+    .select("*")
+    .in("list_id", listIds)
+    .eq("date", today)
+    .order("created_at", { ascending: true });
+
+  if (tasksError) {
+    console.error(tasksError.message);
+  } else {
+    setTodayTasks(tasksData || []);
+  }
+}
 
       setEvent(data);
       setLoading(false);
@@ -69,6 +99,33 @@ export default function EventOverview() {
           <p>{event.budget_total} €</p>
         </div>
 
+<div style={card}>
+  <h3>✅ To Do du jour</h3>
+
+  {todayTasks.length === 0 ? (
+    <p>Aucune tâche prévue aujourd’hui.</p>
+  ) : (
+    todayTasks.map((task) => (
+      <div key={task.id} style={taskRow}>
+        <span
+          style={{
+            textDecoration: task.done ? "line-through" : "none",
+            opacity: task.done ? 0.5 : 1,
+          }}
+        >
+          {task.title}
+        </span>
+
+        {task.time && (
+          <span style={{ color: "#666", fontSize: 13 }}>
+            {task.time}
+          </span>
+        )}
+      </div>
+    ))
+  )}
+</div>
+
         {event?.start_date && (
           <div style={card}>
             <h3>⏳ Compte à rebours</h3>
@@ -93,10 +150,18 @@ const card = {
   border: "1px solid #ddd",
   padding: 15,
   borderRadius: 10,
-  width: 220,
-  minHeight: 120,
+  width: 240,
+  minHeight: 140,
   background: "white",
   display: "flex",
   flexDirection: "column" as const,
+  justifyContent: "flex-start",
+};
+
+const taskRow = {
+  display: "flex",
   justifyContent: "space-between",
+  gap: 12,
+  padding: "8px 0",
+  borderBottom: "1px solid #eee",
 };

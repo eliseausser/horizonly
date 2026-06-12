@@ -18,9 +18,10 @@ export default function TodoPage() {
   const [editListTitle, setEditListTitle] = useState("");
   const [editListCategory, setEditListCategory] = useState("");
 
-  const [openTaskFormListId, setOpenTaskFormListId] = useState<string | null>(
-    null
-  );
+  const [openListMenuId, setOpenListMenuId] = useState<string | null>(null);
+  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
+
+  const [openTaskFormListId, setOpenTaskFormListId] = useState<string | null>(null);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDate, setTaskDate] = useState("");
@@ -82,10 +83,7 @@ export default function TodoPage() {
       },
     ]);
 
-    if (error) {
-      console.error("addList error:", error.message);
-      return;
-    }
+    if (error) return console.error("addList error:", error.message);
 
     resetListForm();
     await loadData();
@@ -108,10 +106,7 @@ export default function TodoPage() {
       })
       .eq("id", listId);
 
-    if (error) {
-      console.error("updateList error:", error.message);
-      return;
-    }
+    if (error) return console.error("updateList error:", error.message);
 
     setEditingListId(null);
     setEditListTitle("");
@@ -125,10 +120,7 @@ export default function TodoPage() {
       .delete()
       .eq("id", listId);
 
-    if (error) {
-      console.error("deleteList error:", error.message);
-      return;
-    }
+    if (error) return console.error("deleteList error:", error.message);
 
     await loadData();
   }
@@ -147,10 +139,7 @@ export default function TodoPage() {
       },
     ]);
 
-    if (error) {
-      console.error("addTask error:", error.message);
-      return;
-    }
+    if (error) return console.error("addTask error:", error.message);
 
     resetTaskForm();
     await loadData();
@@ -179,31 +168,17 @@ export default function TodoPage() {
       })
       .eq("id", taskId);
 
-    if (error) {
-      console.error("updateTask error:", error.message);
-      return;
-    }
+    if (error) return console.error("updateTask error:", error.message);
 
     setEditingTaskId(null);
-    setEditTaskTitle("");
-    setEditTaskDate("");
-    setEditTaskTime("");
-    setEditTaskLink("");
-    setEditTaskComment("");
-
     await loadData();
   }
 
   async function toggleTask(task: any) {
-    const { error } = await supabase
+    await supabase
       .from("todo_tasks")
       .update({ done: !task.done })
       .eq("id", task.id);
-
-    if (error) {
-      console.error("toggleTask error:", error.message);
-      return;
-    }
 
     await loadData();
   }
@@ -214,21 +189,14 @@ export default function TodoPage() {
       .delete()
       .eq("id", taskId);
 
-    if (error) {
-      console.error("deleteTask error:", error.message);
-      return;
-    }
+    if (error) return console.error("deleteTask error:", error.message);
 
     await loadData();
   }
 
   return (
     <div>
-
-      <button
-        onClick={() => setShowListForm(!showListForm)}
-        style={btn}
-      >
+      <button onClick={() => setShowListForm(!showListForm)} style={btn}>
         Créer une liste
       </button>
 
@@ -250,15 +218,13 @@ export default function TodoPage() {
             style={input}
           />
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={addList} style={btn}>
-              Créer
-            </button>
+          <button onClick={addList} style={btn}>
+            Créer
+          </button>
 
-            <button onClick={resetListForm} style={smallBtn}>
-              Annuler
-            </button>
-          </div>
+          <button onClick={resetListForm} style={smallBtn}>
+            Annuler
+          </button>
         </div>
       )}
 
@@ -277,41 +243,28 @@ export default function TodoPage() {
                     {!isEditingList ? (
                       <>
                         <h3 style={{ margin: 0 }}>{list.title}</h3>
-
-                        {list.category && (
-                          <span style={badge}>{list.category}</span>
-                        )}
+                        {list.category && <span style={badge}>{list.category}</span>}
                       </>
                     ) : (
                       <div style={formBox}>
                         <input
                           value={editListTitle}
-                          onChange={(e) =>
-                            setEditListTitle(e.target.value)
-                          }
+                          onChange={(e) => setEditListTitle(e.target.value)}
                           style={input}
                         />
 
                         <input
                           value={editListCategory}
-                          onChange={(e) =>
-                            setEditListCategory(e.target.value)
-                          }
+                          onChange={(e) => setEditListCategory(e.target.value)}
                           placeholder="Type / catégorie"
                           style={input}
                         />
 
-                        <button
-                          onClick={() => updateList(list.id)}
-                          style={btn}
-                        >
+                        <button onClick={() => updateList(list.id)} style={btn}>
                           Enregistrer
                         </button>
 
-                        <button
-                          onClick={() => setEditingListId(null)}
-                          style={smallBtn}
-                        >
+                        <button onClick={() => setEditingListId(null)} style={smallBtn}>
                           Annuler
                         </button>
                       </div>
@@ -319,24 +272,36 @@ export default function TodoPage() {
                   </div>
 
                   {!isEditingList && (
-                    <div style={actions}>
+                    <div style={{ position: "relative" }}>
                       <button
-                        onClick={() => startEditList(list)}
-                        style={smallBtn}
+                        onClick={() =>
+                          setOpenListMenuId(openListMenuId === list.id ? null : list.id)
+                        }
+                        style={iconBtn}
                       >
-                        Modifier
+                        ✏️
                       </button>
 
-                      <button
-                        onClick={() => deleteList(list.id)}
-                        style={{
-                          ...smallBtn,
-                          background: "red",
-                          color: "white",
-                        }}
-                      >
-                        Supprimer
-                      </button>
+                      {openListMenuId === list.id && (
+                        <div style={miniMenu}>
+                          <button
+                            style={menuItem}
+                            onClick={() => {
+                              startEditList(list);
+                              setOpenListMenuId(null);
+                            }}
+                          >
+                            Modifier
+                          </button>
+
+                          <button
+                            style={{ ...menuItem, color: "red" }}
+                            onClick={() => deleteList(list.id)}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -362,9 +327,7 @@ export default function TodoPage() {
 
                                   <span
                                     style={{
-                                      textDecoration: task.done
-                                        ? "line-through"
-                                        : "none",
+                                      textDecoration: task.done ? "line-through" : "none",
                                       opacity: task.done ? 0.5 : 1,
                                       fontWeight: 600,
                                     }}
@@ -376,90 +339,87 @@ export default function TodoPage() {
                                 <div style={taskMeta}>
                                   {task.date && <span>📅 {task.date}</span>}
                                   {task.time && <span>⏰ {task.time}</span>}
-
                                   {task.link && (
-                                    <a
-                                      href={task.link}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{ color: "black" }}
-                                    >
+                                    <a href={task.link} target="_blank" rel="noreferrer">
                                       🔗 Lien
                                     </a>
                                   )}
                                 </div>
 
-                                {task.comment && (
-                                  <p style={comment}>{task.comment}</p>
-                                )}
+                                {task.comment && <p style={comment}>{task.comment}</p>}
                               </div>
 
-                              <div style={actions}>
+                              <div style={{ position: "relative" }}>
                                 <button
-                                  onClick={() => startEditTask(task)}
-                                  style={smallBtn}
+                                  onClick={() =>
+                                    setOpenTaskMenuId(
+                                      openTaskMenuId === task.id ? null : task.id
+                                    )
+                                  }
+                                  style={iconBtn}
                                 >
-                                  Modifier
+                                  ✏️
                                 </button>
 
-                                <button
-                                  onClick={() => deleteTask(task.id)}
-                                  style={smallBtn}
-                                >
-                                  Supprimer
-                                </button>
+                                {openTaskMenuId === task.id && (
+                                  <div style={miniMenu}>
+                                    <button
+                                      style={menuItem}
+                                      onClick={() => {
+                                        startEditTask(task);
+                                        setOpenTaskMenuId(null);
+                                      }}
+                                    >
+                                      Modifier
+                                    </button>
+
+                                    <button
+                                      style={{ ...menuItem, color: "red" }}
+                                      onClick={() => deleteTask(task.id)}
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </>
                           ) : (
                             <div style={{ flex: 1 }}>
                               <input
                                 value={editTaskTitle}
-                                onChange={(e) =>
-                                  setEditTaskTitle(e.target.value)
-                                }
+                                onChange={(e) => setEditTaskTitle(e.target.value)}
                                 style={input}
                               />
 
                               <input
                                 type="date"
                                 value={editTaskDate}
-                                onChange={(e) =>
-                                  setEditTaskDate(e.target.value)
-                                }
+                                onChange={(e) => setEditTaskDate(e.target.value)}
                                 style={input}
                               />
 
                               <input
                                 type="time"
                                 value={editTaskTime}
-                                onChange={(e) =>
-                                  setEditTaskTime(e.target.value)
-                                }
+                                onChange={(e) => setEditTaskTime(e.target.value)}
                                 style={input}
                               />
 
                               <input
                                 placeholder="Lien"
                                 value={editTaskLink}
-                                onChange={(e) =>
-                                  setEditTaskLink(e.target.value)
-                                }
+                                onChange={(e) => setEditTaskLink(e.target.value)}
                                 style={input}
                               />
 
                               <textarea
                                 placeholder="Commentaire"
                                 value={editTaskComment}
-                                onChange={(e) =>
-                                  setEditTaskComment(e.target.value)
-                                }
+                                onChange={(e) => setEditTaskComment(e.target.value)}
                                 style={textarea}
                               />
 
-                              <button
-                                onClick={() => updateTask(task.id)}
-                                style={btn}
-                              >
+                              <button onClick={() => updateTask(task.id)} style={btn}>
                                 Enregistrer
                               </button>
 
@@ -525,15 +485,13 @@ export default function TodoPage() {
                       style={textarea}
                     />
 
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => addTask(list.id)} style={btn}>
-                        Créer la tâche
-                      </button>
+                    <button onClick={() => addTask(list.id)} style={btn}>
+                      Créer la tâche
+                    </button>
 
-                      <button onClick={resetTaskForm} style={smallBtn}>
-                        Annuler
-                      </button>
-                    </div>
+                    <button onClick={resetTaskForm} style={smallBtn}>
+                      Annuler
+                    </button>
                   </div>
                 )}
               </div>
@@ -613,12 +571,7 @@ const smallBtn = {
   borderRadius: 6,
   cursor: "pointer",
   background: "white",
-};
-
-const actions = {
-  display: "flex",
-  gap: 8,
-  alignItems: "center",
+  marginTop: 10,
 };
 
 const badge = {
@@ -658,4 +611,36 @@ const comment = {
   marginBottom: 0,
   color: "#555",
   fontSize: 14,
+};
+
+const iconBtn = {
+  width: 34,
+  height: 34,
+  border: "1px solid #ddd",
+  borderRadius: 8,
+  background: "white",
+  cursor: "pointer",
+};
+
+const miniMenu = {
+  position: "absolute" as const,
+  right: 0,
+  top: 38,
+  width: 130,
+  background: "white",
+  border: "1px solid #ddd",
+  borderRadius: 10,
+  boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
+  overflow: "hidden",
+  zIndex: 20,
+};
+
+const menuItem = {
+  display: "block",
+  width: "100%",
+  padding: "9px 12px",
+  border: "none",
+  background: "white",
+  textAlign: "left" as const,
+  cursor: "pointer",
 };
