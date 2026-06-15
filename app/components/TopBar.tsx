@@ -15,7 +15,7 @@ export default function TopBar() {
 
   return (
     <header style={topbar}>
-      <div style={logo} onClick={() => router.push("/")}>
+      <div style={logo} onClick={() => router.push("/dashboard")}>
         HORIZONLY
       </div>
 
@@ -30,8 +30,8 @@ export default function TopBar() {
               Mes projets
             </button>
 
-            <button style={menuItem} onClick={() => router.push("/settings")}>
-              Settings
+            <button style={menuItem} onClick={() => router.push("/myaccount")}>
+              Mon compte
             </button>
 
             <button style={logoutItem} onClick={handleLogout}>
