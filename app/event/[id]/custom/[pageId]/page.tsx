@@ -224,6 +224,13 @@ export default function CustomPage() {
     await savePage({ listItems, boardItems, images: updated });
   }
 
+async function deleteImage(imageId: string) {
+  const updated = images.filter((image) => image.id !== imageId);
+
+  setImages(updated);
+  await savePage({ listItems, boardItems, images: updated });
+}
+
   async function uploadBoardImage(file: File) {
     const safeFileName = file.name
       .normalize("NFD")
