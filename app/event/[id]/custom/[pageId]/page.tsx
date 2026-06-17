@@ -20,13 +20,12 @@ export default function CustomPage() {
   const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
-  const [selectedBoardItemId, setSelectedBoardItemId] = useState<string | null>(
-    null
-  );
+  const [selectedBoardItemId, setSelectedBoardItemId] = useState<string | null>(null);
 
   const [showTableForm, setShowTableForm] = useState(false);
   const [tableRows, setTableRows] = useState("3");
   const [tableCols, setTableCols] = useState("3");
+  const [helpType, setHelpType] = useState<"list" | "board" | "binder" | null>(null);
 
   useEffect(() => {
     loadPage();
@@ -297,6 +296,38 @@ async function deleteImage(imageId: string) {
     await savePage({ listItems, boardItems, images: updated });
   }
 
+function getHelpContent() {
+  switch (helpType) {
+    case "list":
+      return {
+        title: "✅ Liste",
+        text:
+          "La liste sert à créer des éléments simples à cocher.",
+        examples: "invités, valises, courses, documents à préparer...",
+      };
+
+    case "board":
+      return {
+        title: "✏️ Board",
+        text:
+          "Le board est une page de travail libre. Tu peux y ajouter du texte, des post-it, des formes, des tableaux et des images, comme un mini tableau blanc.",
+        examples:
+          "brainstorming, plan de table, idées déco, organisation visuelle.",
+      };
+
+    case "binder":
+      return {
+        title: "🖼️ Classeur",
+        text:
+          "Le classeur sert à organiser des images sur un tableau. Tu peux importer des photos, les déplacer, les superposer et les agrandir.",
+        examples: "moodboard, inspirations déco, tenues, lieux, ambiances.",
+      };
+
+    default:
+      return null;
+  }
+}
+
   const selectedBoardItem = boardItems.find(
     (item) => item.id === selectedBoardItemId
   );
@@ -307,17 +338,54 @@ async function deleteImage(imageId: string) {
     <div>
 {type === "blank" && (
   <div style={typeSelector}>
-    <button onClick={() => chooseType("list")} style={typeBtn}>
-      ✅ Liste
-    </button>
+    <div style={choiceWrapper}>
+      <button onClick={() => chooseType("list")} style={typeBtn}>
+        ✅ Liste
+      </button>
 
-    <button onClick={() => chooseType("board")} style={typeBtn}>
-      ✏️ Board
-    </button>
+      <button onClick={() => setHelpType("list")} style={helpBtn}>
+        ?
+      </button>
+    </div>
 
-    <button onClick={() => chooseType("binder")} style={typeBtn}>
-      🖼️ Classeur
-    </button>
+    <div style={choiceWrapper}>
+      <button onClick={() => chooseType("board")} style={typeBtn}>
+        ✏️ Board
+      </button>
+
+      <button onClick={() => setHelpType("board")} style={helpBtn}>
+        ?
+      </button>
+    </div>
+
+    <div style={choiceWrapper}>
+      <button onClick={() => chooseType("binder")} style={typeBtn}>
+        🖼️ Classeur
+      </button>
+
+      <button onClick={() => setHelpType("binder")} style={helpBtn}>
+        ?
+      </button>
+    </div>
+  </div>
+)}
+
+{helpType && getHelpContent() && (
+  <div style={modalOverlay}>
+    <div style={helpModal}>
+      <h2>{getHelpContent()?.title}</h2>
+
+      <p>{getHelpContent()?.text}</p>
+
+      <div style={exampleBox}>
+        <strong>Exemples :</strong>
+        <p>{getHelpContent()?.examples}</p>
+      </div>
+
+      <button onClick={() => setHelpType(null)} style={btn}>
+        Compris
+      </button>
+    </div>
   </div>
 )}
 
@@ -1108,4 +1176,46 @@ const boardResizeHandle = {
   background: "transparent",
   cursor: "nwse-resize",
   zIndex: 20,
+};
+
+const choiceWrapper = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const helpBtn = {
+  width: 26,
+  height: 26,
+  borderRadius: 999,
+  border: "1px solid #ddd",
+  background: "white",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const modalOverlay = {
+  position: "fixed" as const,
+  inset: 0,
+  background: "rgba(0,0,0,0.35)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 99999,
+};
+
+const helpModal = {
+  width: 420,
+  maxWidth: "90vw",
+  padding: 24,
+  borderRadius: 18,
+  background: "white",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+};
+
+const exampleBox = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 12,
+  background: "#f7f7f7",
 };

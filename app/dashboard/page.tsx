@@ -561,7 +561,7 @@ const projectTitle = {
 };
 
 const countdownBadge = {
-  fontSize: 40,
+  fontSize: 22,
   fontWeight: 800,
   color: "#111",
   minWidth: 110,

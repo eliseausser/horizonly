@@ -8,6 +8,17 @@ import TopBar from "@/app/components/TopBar";
 import { supabase } from "@/lib/supabase";
 
 import {
+  ArrowLeft,
+  Home,
+  CalendarDays,
+  Hotel,
+  Wallet,
+  CheckSquare,
+  Files,
+  Pin,
+} from "lucide-react";
+
+import {
   DndContext,
   closestCenter,
   DragEndEvent,
@@ -25,6 +36,13 @@ import {
 
 import { CSS } from "@dnd-kit/utilities";
 
+type TabItem = {
+  key: string;
+  label: string;
+  href: string;
+  isCustom?: boolean;
+};
+
 export default function EventLayout({
   children,
   params,
@@ -36,19 +54,18 @@ export default function EventLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [event, setEvent] = useState<any>(null);
-  const [customPages, setCustomPages] = useState<any[]>([]);
-  const [tabs, setTabs] = useState<any[]>([]);
-
+  const [tabs, setTabs] = useState<TabItem[]>([]);
   const [showCreateTab, setShowCreateTab] = useState(false);
   const [newTabTitle, setNewTabTitle] = useState("");
-const [renamingTab, setRenamingTab] = useState<any | null>(null);
-const [renameValue, setRenameValue] = useState("");
-const [contextMenu, setContextMenu] = useState<{
-  tab: any;
-  x: number;
-  y: number;
-} | null>(null);
+
+  const [contextMenu, setContextMenu] = useState<{
+    tab: TabItem;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [renamingTab, setRenamingTab] = useState<TabItem | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -57,52 +74,57 @@ const [contextMenu, setContextMenu] = useState<{
   );
 
   useEffect(() => {
-    loadData();
+    loadTabs();
   }, [id]);
 
-  async function loadData() {
-    const { data: eventData } = await supabase
-      .from("events")
-      .select("title, type")
-      .eq("id", id)
-      .single();
+  function getFixedTabs(): TabItem[] {
+    return [
+      { key: "overview", label: "Accueil", href: `/event/${id}` },
+      { key: "planning", label: "Planning", href: `/event/${id}/planning` },
+      { key: "bookings", label: "Réservations", href: `/event/${id}/bookings` },
+      { key: "budget", label: "Budget", href: `/event/${id}/budget` },
+      { key: "todo", label: "Tâches", href: `/event/${id}/todo` },
+      { key: "documents", label: "Documents", href: `/event/${id}/documents` },
+    ];
+  }
 
-    setEvent(eventData);
-
-    const { data: pagesData } = await supabase
+  async function loadTabs() {
+    const { data: pagesData, error: pagesError } = await supabase
       .from("custom_pages")
       .select("*")
       .eq("event_id", id)
       .order("created_at", { ascending: true });
 
-    setCustomPages(pagesData || []);
+    if (pagesError) {
+      console.error(pagesError.message);
+      return;
+    }
 
-    const fixedTabs = [
-      { key: "overview", label: "Overview", href: `/event/${id}` },
-      { key: "planning", label: "Planning", href: `/event/${id}/planning` },
-      { key: "bookings", label: "Bookings", href: `/event/${id}/bookings` },
-      { key: "budget", label: "Budget", href: `/event/${id}/budget` },
-      { key: "todo", label: "To Do List", href: `/event/${id}/todo` },
-    ];
-
-    const customTabs = (pagesData || []).map((page) => ({
+    const customTabs: TabItem[] = (pagesData || []).map((page) => ({
       key: `custom-${page.id}`,
       label: page.title,
       href: `/event/${id}/custom/${page.id}`,
+      isCustom: true,
     }));
 
-    const allTabs = [...fixedTabs, ...customTabs];
+    const allTabs = [...getFixedTabs(), ...customTabs];
 
-    const { data: orderData } = await supabase
+    const { data: orderData, error: orderError } = await supabase
       .from("event_tab_order")
       .select("*")
       .eq("event_id", id);
+
+    if (orderError) {
+      console.error(orderError.message);
+      setTabs(allTabs);
+      return;
+    }
 
     const orderMap = new Map(
       (orderData || []).map((item) => [item.tab_key, item.position])
     );
 
-    const sortedTabs = allTabs.sort((a, b) => {
+    const sortedTabs = [...allTabs].sort((a, b) => {
       const aPos = orderMap.get(a.key);
       const bPos = orderMap.get(b.key);
 
@@ -116,64 +138,26 @@ const [contextMenu, setContextMenu] = useState<{
     setTabs(sortedTabs);
   }
 
-async function renameCustomTab() {
-  if (!renamingTab || !renameValue.trim()) return;
+  async function saveTabOrder(newTabs: TabItem[]) {
+    const results = await Promise.all(
+      newTabs.map((tab, index) =>
+        supabase.from("event_tab_order").upsert(
+          {
+            event_id: id,
+            tab_key: tab.key,
+            position: index,
+          },
+          { onConflict: "event_id,tab_key" }
+        )
+      )
+    );
 
-  const pageId = renamingTab.key.replace("custom-", "");
-
-  const { error } = await supabase
-    .from("custom_pages")
-    .update({ title: renameValue })
-    .eq("id", pageId);
-
-  if (error) {
-    console.error(error.message);
-    return;
+    if (results.some((result) => result.error)) {
+      console.error("saveTabOrder error:", results);
+    }
   }
 
-  setTabs((prev) =>
-    prev.map((tab) =>
-      tab.key === renamingTab.key ? { ...tab, label: renameValue } : tab
-    )
-  );
-
-  setCustomPages((prev) =>
-    prev.map((page) =>
-      page.id === pageId ? { ...page, title: renameValue } : page
-    )
-  );
-
-  setRenamingTab(null);
-  setRenameValue("");
-}
-
-async function deleteCustomTab(tab: any) {
-  const pageId = tab.key.replace("custom-", "");
-
-  const { error } = await supabase
-    .from("custom_pages")
-    .delete()
-    .eq("id", pageId);
-
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-
-  const updatedTabs = tabs.filter((item) => item.key !== tab.key);
-
-  setTabs(updatedTabs);
-  setCustomPages((prev) => prev.filter((page) => page.id !== pageId));
-  setContextMenu(null);
-
-  await saveTabOrder(updatedTabs);
-
-  if (pathname.includes(`/custom/${pageId}`)) {
-    router.push(`/event/${id}`);
-  }
-}  
-
-async function createCustomPage() {
+  async function createCustomPage() {
     if (!newTabTitle.trim()) return;
 
     const { data, error } = await supabase
@@ -181,7 +165,7 @@ async function createCustomPage() {
       .insert([
         {
           event_id: id,
-          title: newTabTitle,
+          title: newTabTitle.trim(),
           type: "blank",
         },
       ])
@@ -193,39 +177,74 @@ async function createCustomPage() {
       return;
     }
 
-    const newTab = {
+    const newTab: TabItem = {
       key: `custom-${data.id}`,
       label: data.title,
       href: `/event/${id}/custom/${data.id}`,
+      isCustom: true,
     };
 
     const newTabs = [...tabs, newTab];
 
-    setCustomPages((prev) => [...prev, data]);
     setTabs(newTabs);
     setNewTabTitle("");
     setShowCreateTab(false);
 
     await saveTabOrder(newTabs);
-
     router.push(`/event/${id}/custom/${data.id}`);
   }
 
-  async function saveTabOrder(newTabs: any[]) {
-    await Promise.all(
-      newTabs.map((tab, index) =>
-        supabase.from("event_tab_order").upsert(
-          {
-            event_id: id,
-            tab_key: tab.key,
-            position: index,
-          },
-          {
-            onConflict: "event_id,tab_key",
-          }
-        )
+  async function renameCustomTab() {
+    if (!renamingTab || !renameValue.trim()) return;
+
+    const pageId = renamingTab.key.replace("custom-", "");
+    const cleanName = renameValue.trim();
+
+    const { error } = await supabase
+      .from("custom_pages")
+      .update({ title: cleanName })
+      .eq("id", pageId);
+
+    if (error) {
+      console.error(error.message);
+      return;
+    }
+
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.key === renamingTab.key ? { ...tab, label: cleanName } : tab
       )
     );
+
+    setRenamingTab(null);
+    setRenameValue("");
+  }
+
+  async function deleteCustomTab(tab: TabItem) {
+    if (!tab.isCustom) return;
+
+    const pageId = tab.key.replace("custom-", "");
+
+    const { error } = await supabase
+      .from("custom_pages")
+      .delete()
+      .eq("id", pageId);
+
+    if (error) {
+      console.error(error.message);
+      return;
+    }
+
+    const updatedTabs = tabs.filter((item) => item.key !== tab.key);
+
+    setTabs(updatedTabs);
+    setContextMenu(null);
+
+    await saveTabOrder(updatedTabs);
+
+    if (pathname.includes(`/custom/${pageId}`)) {
+      router.push(`/event/${id}`);
+    }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -244,85 +263,43 @@ async function createCustomPage() {
     await saveTabOrder(newTabs);
   }
 
-  function getTypeColor(type: string) {
-    switch (type?.toLowerCase()) {
-      case "voyage":
-        return "#22c55e";
-      case "evenement":
-        return "#3b82f6";
-      default:
-        return "#6b7280";
-    }
-  }
-
   function isActiveTab(href: string) {
-    if (href === `/event/${id}`) {
-      return pathname === href;
-    }
-
+    if (href === `/event/${id}`) return pathname === href;
     return pathname.includes(href);
   }
 
-  const tabStyle = {
-    padding: "8px 12px",
-    borderRadius: 8,
-    textDecoration: "none",
-    color: "#555",
-    whiteSpace: "nowrap" as const,
-    display: "inline-block",
-  };
+  function getTabIcon(tab: TabItem) {
+    if (tab.isCustom) return Pin;
 
-  const activeTabStyle = {
-    ...tabStyle,
-    background: "black",
-    color: "white",
-  };
+    switch (tab.key) {
+      case "overview":
+        return Home;
+      case "planning":
+        return CalendarDays;
+      case "bookings":
+        return Hotel;
+      case "budget":
+        return Wallet;
+      case "todo":
+        return CheckSquare;
+      case "documents":
+        return Files;
+      default:
+        return Pin;
+    }
+  }
 
   return (
-    <div>
+    <div onClick={() => contextMenu && setContextMenu(null)}>
       <TopBar />
 
-      <div
-        style={{
-          padding: 15,
-          borderBottom: "1px solid #ddd",
-          position: "sticky",
-          top: 70,
-          background: "white",
-          zIndex: 998,
-        }}
-      >
-        <h2 style={{ marginBottom: 8, fontSize: 28, fontWeight: "bold" }}>
-          {event?.title || "Chargement..."}
-        </h2>
+      <div style={tabsBar}>
+        <div style={tabsRow}>
+          <Link href="/dashboard" style={backButton} title="Retour aux projets">
+            <ArrowLeft size={18} />
+          </Link>
 
-        {event?.type && (
-          <div style={{ marginBottom: 15 }}>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "5px 12px",
-                borderRadius: 999,
-                background: getTypeColor(event.type),
-                color: "white",
-                fontSize: 12,
-                fontWeight: "bold",
-                textTransform: "capitalize",
-              }}
-            >
-              {event.type}
-            </span>
-          </div>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
-          <div
-            style={{
-              flex: 1,
-              overflowX: "auto",
-              paddingBottom: 4,
-            }}
-          >
+          <div style={scrollTabs}>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -332,28 +309,42 @@ async function createCustomPage() {
                 items={tabs.map((tab) => tab.key)}
                 strategy={horizontalListSortingStrategy}
               >
-                <div style={{ display: "flex", gap: 15 }}>
-                  {tabs.map((tab) => (
-  <SortableTab key={tab.key} id={tab.key}>
-    <Link
-      href={tab.href}
-      onContextMenu={(e) => {
-        if (!tab.key.startsWith("custom-")) return;
+                <div style={tabsList}>
+                  {tabs.map((tab) => {
+                    const Icon = getTabIcon(tab);
 
-        e.preventDefault();
+                    return (
+                      <SortableTab key={tab.key} id={tab.key}>
+                        <Link
+                          href={tab.href}
+                          onContextMenu={(e) => {
+                            if (!tab.isCustom) return;
 
-        setContextMenu({
-          tab,
-          x: e.clientX,
-          y: e.clientY,
-        });
-      }}
-      style={isActiveTab(tab.href) ? activeTabStyle : tabStyle}
-    >
-      {tab.label}
-    </Link>
-  </SortableTab>
-))}
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            setContextMenu({
+                              tab,
+                              x: e.clientX,
+                              y: e.clientY,
+                            });
+                          }}
+                          style={
+                            tab.isCustom
+                              ? isActiveTab(tab.href)
+                                ? activeCustomTabStyle
+                                : customTabStyle
+                              : isActiveTab(tab.href)
+                              ? activeTabStyle
+                              : tabStyle
+                          }
+                        >
+                          <Icon size={16} />
+                          <span>{tab.label}</span>
+                        </Link>
+                      </SortableTab>
+                    );
+                  })}
                 </div>
               </SortableContext>
             </DndContext>
@@ -361,14 +352,17 @@ async function createCustomPage() {
 
           <div style={{ position: "relative", flexShrink: 0 }}>
             <button
-              onClick={() => setShowCreateTab(!showCreateTab)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCreateTab(!showCreateTab);
+              }}
               style={plusBtn}
             >
               +
             </button>
 
             {showCreateTab && (
-              <div style={createMenu}>
+              <div style={createMenu} onClick={(e) => e.stopPropagation()}>
                 <input
                   placeholder="Nom de l'onglet"
                   value={newTabTitle}
@@ -384,69 +378,70 @@ async function createCustomPage() {
           </div>
         </div>
       </div>
-{contextMenu && (
-  <div
-    style={{
-      ...contextMenuStyle,
-      left: contextMenu.x,
-      top: contextMenu.y,
-    }}
-  >
-    
-<button
-  style={contextMenuItem}
-  onClick={() => {
-    setRenamingTab(contextMenu.tab);
-    setRenameValue(contextMenu.tab.label);
-    setContextMenu(null);
-  }}
->
-  Renommer
-</button>
-<button
-      style={contextMenuItem}
-      onClick={() => deleteCustomTab(contextMenu.tab)}
-    >
-      Supprimer
-    </button>
 
-    <button
-      style={contextMenuItem}
-      onClick={() => setContextMenu(null)}
-    >
-      Annuler
-    </button>
-  </div>
-)}
-{renamingTab && (
-  <div style={modalOverlay}>
-    <div style={modal}>
-      <h3>Renommer l’onglet</h3>
-
-      <input
-        value={renameValue}
-        onChange={(e) => setRenameValue(e.target.value)}
-        style={input}
-      />
-
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <button onClick={renameCustomTab} style={btn}>
-          Enregistrer
-        </button>
-
-        <button
-          onClick={() => {
-            setRenamingTab(null);
-            setRenameValue("");
+      {contextMenu && (
+        <div
+          style={{
+            ...contextMenuStyle,
+            left: contextMenu.x,
+            top: contextMenu.y,
           }}
-          style={secondaryBtn}
+          onClick={(e) => e.stopPropagation()}
         >
-          Annuler
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+          <button
+            style={contextMenuItem}
+            onClick={() => {
+              setRenamingTab(contextMenu.tab);
+              setRenameValue(contextMenu.tab.label);
+              setContextMenu(null);
+            }}
+          >
+            Renommer
+          </button>
+
+          <button
+            style={{ ...contextMenuItem, color: "red" }}
+            onClick={() => deleteCustomTab(contextMenu.tab)}
+          >
+            Supprimer
+          </button>
+
+          <button style={contextMenuItem} onClick={() => setContextMenu(null)}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {renamingTab && (
+        <div style={modalOverlay}>
+          <div style={modal}>
+            <h3>Renommer l’onglet</h3>
+
+            <input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              style={input}
+            />
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <button onClick={renameCustomTab} style={btn}>
+                Enregistrer
+              </button>
+
+              <button
+                onClick={() => {
+                  setRenamingTab(null);
+                  setRenameValue("");
+                }}
+                style={secondaryBtn}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ padding: 30 }}>{children}</div>
     </div>
   );
@@ -478,6 +473,77 @@ function SortableTab({
     </div>
   );
 }
+
+const tabsBar = {
+  padding: 15,
+  borderBottom: "1px solid #ddd",
+  position: "sticky" as const,
+  top: 70,
+  background: "white",
+  zIndex: 998,
+};
+
+const tabsRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 15,
+};
+
+const scrollTabs = {
+  flex: 1,
+  overflowX: "auto" as const,
+  paddingBottom: 4,
+};
+
+const tabsList = {
+  display: "flex",
+  gap: 15,
+};
+
+const tabStyle = {
+  padding: "8px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  color: "#555",
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  whiteSpace: "nowrap" as const,
+};
+
+const activeTabStyle = {
+  ...tabStyle,
+  background: "black",
+  color: "white",
+};
+
+const customTabStyle = {
+  ...tabStyle,
+  background: "#f5f5f5",
+  color: "#666",
+  border: "1px solid #eee",
+};
+
+const activeCustomTabStyle = {
+  ...tabStyle,
+  background: "black",
+  color: "white",
+  border: "1px solid black",
+};
+
+const backButton = {
+  width: 38,
+  height: 38,
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "white",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  color: "#444",
+  flexShrink: 0,
+};
 
 const plusBtn = {
   width: 34,
