@@ -1024,9 +1024,10 @@ setSelectedBookingId("");
   editType={editType}
   setEditType={setEditType}
   bookings={bookings}
+  bookingSearch={bookingSearch}
+  setBookingSearch={setBookingSearch}
   bookingSearchActivityId={bookingSearchActivityId}
   setBookingSearchActivityId={setBookingSearchActivityId}
-  bookingSearch={bookingSearch}
   attachBookingToActivity={attachBookingToActivity}
   detachBookingFromActivity={detachBookingFromActivity}
   updateActivity={updateActivity}
@@ -1034,8 +1035,6 @@ setSelectedBookingId("");
   openActivityMenuId={openActivityMenuId}
   setOpenActivityMenuId={setOpenActivityMenuId}
   formatTime={formatTime}
-  bookingSearch={bookingSearch}
-  setBookingSearch={setBookingSearch}
 />
                             ))}
                           </SortableContext>
