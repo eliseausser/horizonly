@@ -311,7 +311,7 @@ function renderEventCard(event: any) {
 
 <DatePicker
   selected={stringToDate(editStartDate)}
-  onChange={(date) => {
+  onChange={(date: Date | null) => {
     if (!date) return;
 
     const value = dateToString(date);
@@ -328,7 +328,7 @@ function renderEventCard(event: any) {
 
 <DatePicker
   selected={stringToDate(editEndDate)}
-  onChange={(date) => {
+  onChange={(date: Date | null) => {
     if (!date) return;
     setEditEndDate(dateToString(date));
   }}
@@ -421,7 +421,7 @@ return (
 
 <DatePicker
   selected={stringToDate(startDate)}
-  onChange={(date) => {
+  onChange={(date: Date | null) => {
     if (!date) return;
 
     const value = dateToString(date);
@@ -438,7 +438,7 @@ return (
 
 <DatePicker
   selected={stringToDate(endDate)}
-  onChange={(date) => {
+  onChange={(date: Date | null) => {
     if (!date) return;
     setEndDate(dateToString(date));
   }}
