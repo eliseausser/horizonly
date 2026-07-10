@@ -1059,7 +1059,7 @@ setSelectedBookingId("");
 
 <TimePicker
   value={activityStart}
-  onChange={(value) => {
+  onChange={(value: string | null) => {
     if (!value) return;
 
     setActivityStart(cleanTime(value));
@@ -1912,7 +1912,7 @@ const filteredBookings = bookings.filter((booking: any) => {
 
           <TimePicker
             value={editStart}
-            onChange={(value) => {
+            onChange={(value: string | null) => {
               if (!value) {
                 setEditStart("");
                 return;
@@ -1932,7 +1932,7 @@ const filteredBookings = bookings.filter((booking: any) => {
 
           <TimePicker
             value={editEnd}
-            onChange={(value) => {
+            onChange={(value: string | null) => {
               if (!value) {
                 setEditEnd("");
                 return;
