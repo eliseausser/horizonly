@@ -121,10 +121,19 @@ export default function LoginPage() {
     <div style={page}>
       <div style={card}>
         <div style={brand}>
-          <div style={logo}>H</div>
+<img
+  src="/logo.svg"
+  alt="MERGE"
+  style={{
+    width: 52,
+    height: 52,
+    objectFit: "contain",
+    display: "block",
+  }}
+/>
 
           <div>
-            <h1 style={title}>HORIZONLY</h1>
+            <h1 style={title}>MERGE</h1>
             <p style={subtitle}>
               Organisez tous vos projets.
             </p>
@@ -259,8 +268,7 @@ const page = {
   alignItems: "center",
   justifyContent: "center",
   padding: 24,
-  background:
-    "linear-gradient(135deg, #f7f7f7 0%, #eef5ff 45%, #f9f4ec 100%)",
+  background: "#F4F1EC",
 };
 
 const card = {
@@ -268,9 +276,9 @@ const card = {
   maxWidth: 460,
   padding: 32,
   borderRadius: 24,
-  background: "white",
-  boxShadow: "0 25px 80px rgba(0,0,0,0.12)",
-  border: "1px solid #eee",
+  background: "#FAFAF8",
+  boxShadow: "0 25px 80px rgba(34,34,34,0.10)",
+  border: "1px solid rgba(110,133,112,0.18)",
 };
 
 const brand = {
@@ -297,11 +305,13 @@ const title = {
   margin: 0,
   fontSize: 28,
   letterSpacing: "-1px",
+  color: "#222222",
+  fontWeight: 700,
 };
 
 const subtitle = {
   margin: "6px 0 0 0",
-  color: "#666",
+  color: "#6E8570",
   lineHeight: 1.4,
 };
 
@@ -309,7 +319,7 @@ const tabs = {
   display: "flex",
   padding: 4,
   borderRadius: 999,
-  background: "#f3f3f3",
+  background: "#F4F1EC",
   marginBottom: 22,
 };
 
@@ -321,12 +331,14 @@ const tab = {
   background: "transparent",
   cursor: "pointer",
   fontWeight: 600,
+  color: "#6E8570",
 };
 
 const activeTab = {
   ...tab,
-  background: "white",
-  boxShadow: "0 3px 12px rgba(0,0,0,0.08)",
+  background: "#FAFAF8",
+  color: "#222222",
+  boxShadow: "0 3px 12px rgba(34,34,34,0.08)",
 };
 
 const form = {
@@ -372,8 +384,8 @@ const primaryBtn = {
   padding: "13px 14px",
   borderRadius: 12,
   border: "none",
-  background: "black",
-  color: "white",
+  background: "#6E8570",
+  color: "#FAFAF8",
   fontWeight: 700,
   cursor: "pointer",
   marginTop: 4,
@@ -382,8 +394,9 @@ const primaryBtn = {
 const googleBtn = {
   padding: "13px 14px",
   borderRadius: 12,
-  border: "1px solid #ddd",
-  background: "white",
+  border: "1px solid rgba(110,133,112,0.28)",
+  background: "#FAFAF8",
+  color: "#222222",
   fontWeight: 700,
   cursor: "pointer",
 };
@@ -391,7 +404,7 @@ const googleBtn = {
 const linkBtn = {
   border: "none",
   background: "transparent",
-  color: "#555",
+  color: "#6E8570",
   cursor: "pointer",
   textDecoration: "underline",
 };

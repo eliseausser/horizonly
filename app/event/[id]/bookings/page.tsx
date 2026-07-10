@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useParams, useSearchParams } from "next/navigation";
 
 export default function BookingsPage() {
   const { id } = useParams();
@@ -17,6 +17,11 @@ export default function BookingsPage() {
   const [price, setPrice] = useState("");
   const [contact, setContact] = useState("");
   const [notes, setNotes] = useState("");
+const searchParams = useSearchParams();
+const selectedBookingFromUrl = searchParams.get("booking");
+
+const [highlightedBookingId, setHighlightedBookingId] =
+  useState<string | null>(null);
 
   useEffect(() => {
     loadBookings();
@@ -111,6 +116,31 @@ export default function BookingsPage() {
 
     await loadBookings();
   }
+
+useEffect(() => {
+  if (!selectedBookingFromUrl || bookings.length === 0) return;
+
+  const timeout = window.setTimeout(() => {
+    const element = document.getElementById(
+      `booking-${selectedBookingFromUrl}`
+    );
+
+    if (!element) return;
+
+    element.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    setHighlightedBookingId(selectedBookingFromUrl);
+
+    window.setTimeout(() => {
+      setHighlightedBookingId(null);
+    }, 2500);
+  }, 200);
+
+  return () => window.clearTimeout(timeout);
+}, [selectedBookingFromUrl, bookings]);
 
   function getTypeLabel(type: string) {
     switch (type) {
@@ -245,8 +275,17 @@ export default function BookingsPage() {
         {bookings.length === 0 ? (
           <p>Aucun booking pour le moment.</p>
         ) : (
-          bookings.map((booking) => (
-            <div key={booking.id} style={card}>
+bookings.map((booking) => (
+  <div
+    key={booking.id}
+    id={`booking-${booking.id}`}
+    style={{
+      ...bookingCard,
+      ...(highlightedBookingId === booking.id
+        ? highlightedBookingCard
+        : {}),
+    }}
+  >
               <div>
                 <h3 style={{ marginTop: 0 }}>{booking.name}</h3>
 
@@ -376,4 +415,21 @@ const statusBadge = {
   fontSize: 12,
   fontWeight: "bold",
   textAlign: "center" as const,
+};
+
+const highlightedBookingCard = {
+  border: "2px solid #6E8570",
+  background: "#E6EEE5",
+  boxShadow: "0 0 0 5px rgba(110,133,112,0.14)",
+  transition: "all 0.3s ease",
+};
+
+const bookingCard = {
+  marginTop: 12,
+  padding: 18,
+  borderRadius: 16,
+  border: "1px solid #DED8CE",
+  background: "#FAFAF8",
+  color: "#222222",
+  boxShadow: "0 10px 25px rgba(34,34,34,0.05)",
 };

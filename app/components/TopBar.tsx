@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image";
 
 export default function TopBar() {
   const router = useRouter();
@@ -15,19 +16,37 @@ export default function TopBar() {
 
   return (
     <header style={topbar}>
-      <div style={logo} onClick={() => router.push("/dashboard")}>
-        HORIZONLY
-      </div>
+<div
+  style={logoContainer}
+  onClick={() => router.push("/dashboard")}
+>
+  <img
+    src="/logo.svg"
+    alt="MERGE"
+    style={{
+      width: 38,
+      height: 38,
+      objectFit: "contain",
+      display: "block",
+    }}
+  />
+
+  <span style={logo}>MERGE</span>
+</div>
 
       <div style={rightSide}>
         <button style={profileButton} onClick={() => setOpen(!open)}>
-          👤 Profil ▾
+          Mon compte ▾
         </button>
 
         {open && (
           <div style={dropdown}>
             <button style={menuItem} onClick={() => router.push("/dashboard")}>
               Mes projets
+            </button>
+
+	    <button style={menuItem} onClick={() => router.push("/archives")}>
+              Archives
             </button>
 
             <button style={menuItem} onClick={() => router.push("/myaccount")}>
@@ -48,20 +67,27 @@ const topbar = {
   position: "sticky" as const,
   top: 0,
   zIndex: 1000,
-  height: 70,
-  background: "white",
-  borderBottom: "1px solid #eee",
+  height: 74,
+  background: "#F4F1EC",
+  borderBottom: "1px solid #E5DED4",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  padding: "0 28px",
+  padding: "0 36px",
+};
+
+const logoContainer = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  cursor: "pointer",
 };
 
 const logo = {
-  fontSize: 22,
-  fontWeight: 800,
-  letterSpacing: "-0.5px",
-  cursor: "pointer",
+  fontSize: 24,
+  fontWeight: 700,
+  color: "#222222",
+  letterSpacing: "-0.4px",
 };
 
 const rightSide = {
@@ -69,35 +95,40 @@ const rightSide = {
 };
 
 const profileButton = {
-  border: "1px solid #ddd",
-  background: "#f8f8f8",
-  padding: "10px 14px",
+  border: "1px solid #D9D2C8",
+  background: "#FAFAF8",
+  color: "#222222",
+  padding: "11px 18px",
   borderRadius: 999,
   cursor: "pointer",
+  fontWeight: 600,
+  transition: "0.2s",
 };
 
 const dropdown = {
   position: "absolute" as const,
   right: 0,
-  top: 48,
-  width: 180,
-  background: "white",
-  border: "1px solid #ddd",
-  borderRadius: 14,
+  top: 54,
+  width: 210,
+  background: "#FAFAF8",
+  border: "1px solid #E5DED4",
+  borderRadius: 16,
   overflow: "hidden",
-  boxShadow: "0 12px 35px rgba(0,0,0,0.12)",
+  boxShadow: "0 18px 40px rgba(34,34,34,0.08)",
 };
 
 const menuItem = {
   width: "100%",
   border: "none",
-  background: "white",
-  padding: "12px 16px",
+  background: "#FAFAF8",
+  color: "#222222",
+  padding: "14px 18px",
   textAlign: "left" as const,
   cursor: "pointer",
+  fontWeight: 500,
 };
 
 const logoutItem = {
   ...menuItem,
-  color: "red",
+  color: "#6E8570",
 };

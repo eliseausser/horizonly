@@ -7,7 +7,20 @@ export default function Home() {
       
       {/* Header */}
       <header style={styles.header}>
-        <h1 style={styles.logo}>Horizonly ✈️</h1>
+        <div style={styles.logoContainer}>
+<img
+  src="/logo.svg"
+  alt="MERGE"
+  style={{
+    width: 52,
+    height: 52,
+    objectFit: "contain",
+    display: "block",
+  }}
+/>
+
+  <h1 style={styles.logo}>MERGE</h1>
+</div>
 
         <Link href="/login">
           <button style={styles.loginButton}>
@@ -26,12 +39,6 @@ export default function Home() {
           Planifie tes itinéraires, ajoute tes activités et
           organise tes voyages en un seul endroit.
         </p>
-
-        <Link href="/login">
-          <button style={styles.cta}>
-            Créer un voyage
-          </button>
-        </Link>
       </section>
 
     </main>
@@ -40,10 +47,14 @@ export default function Home() {
 
 const styles: Record<string, CSSProperties> = {
   container: {
-    minHeight: "100vh",
-    background: "#f5f5f5",
-    fontFamily: "sans-serif",
-  },
+  minHeight: "100vh",
+  background: "#F4F1EC",
+},
+logoContainer: {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+},
   header: {
     display: "flex",
     justifyContent: "space-between",
@@ -51,42 +62,49 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
   },
   logo: {
-    fontSize: "24px",
-    fontWeight: "bold",
-  },
-  loginButton: {
-    padding: "10px 16px",
-    borderRadius: "10px",
-    border: "none",
-    background: "black",
-    color: "white",
-    cursor: "pointer",
-  },
+  fontSize: "24px",
+  fontWeight: "700",
+  color: "#222222",
+  margin: 0,
+},
+loginButton: {
+  padding: "10px 18px",
+  borderRadius: "12px",
+  border: "none",
+  background: "#222222",
+  color: "#FAFAF8",
+  cursor: "pointer",
+  fontWeight: 600,
+},
   hero: {
     textAlign: "center",
     marginTop: "120px",
     padding: "0 20px",
   },
   title: {
-    fontSize: "48px",
-    fontWeight: "bold",
-  },
+  fontSize: "56px",
+  fontWeight: "700",
+  color: "#6E8570",
+  lineHeight: 1.1,
+},
   subtitle: {
-    marginTop: "20px",
-    fontSize: "18px",
-    color: "#555",
-    maxWidth: "600px",
-    marginLeft: "auto",
-    marginRight: "auto",
-  },
-  cta: {
-    marginTop: "30px",
-    padding: "14px 24px",
-    fontSize: "16px",
-    borderRadius: "12px",
-    border: "none",
-    background: "black",
-    color: "white",
-    cursor: "pointer",
-  },
+  fontSize: "20px",
+  fontWeight: 400,
+  color: "#A8BFA5",
+  lineHeight: 1.7,
+  maxWidth: "650px",
+  margin: "20px auto 0",
+},
+cta: {
+  marginTop: "36px",
+  padding: "15px 28px",
+  fontSize: "16px",
+  fontWeight: 600,
+  borderRadius: "14px",
+  border: "none",
+  background: "#6E8570",
+  color: "#F4F1EC",
+  cursor: "pointer",
+},
+
 };

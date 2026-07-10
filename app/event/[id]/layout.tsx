@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-
-import TopBar from "@/app/components/TopBar";
 import { supabase } from "@/lib/supabase";
 
 import {
@@ -57,6 +55,8 @@ export default function EventLayout({
   const [tabs, setTabs] = useState<TabItem[]>([]);
   const [showCreateTab, setShowCreateTab] = useState(false);
   const [newTabTitle, setNewTabTitle] = useState("");
+  const [showOtherMenu, setShowOtherMenu] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{
     tab: TabItem;
@@ -289,163 +289,222 @@ export default function EventLayout({
     }
   }
 
-  return (
-    <div onClick={() => contextMenu && setContextMenu(null)}>
-      <TopBar />
+return (
+  <div
+    onClick={() => {
+      if (contextMenu) setContextMenu(null);
+      if (showOtherMenu) setShowOtherMenu(false);
+    }}
+  >
+    <div style={projectTopBar}>
+      <Link href="/dashboard" style={brand}>
+        <img src="/logo.svg" alt="MERGE" style={{ width: 34, height: "auto" }} />
+      </Link>
 
-      <div style={tabsBar}>
-        <div style={tabsRow}>
-          <Link href="/dashboard" style={backButton} title="Retour aux projets">
-            <ArrowLeft size={18} />
-          </Link>
+      <div style={scrollTabs}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={tabs.filter((tab) => !tab.isCustom).map((tab) => tab.key)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div style={tabsList}>
+              {tabs
+                .filter((tab) => !tab.isCustom)
+                .map((tab) => {
+                  const Icon = getTabIcon(tab);
 
-          <div style={scrollTabs}>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={tabs.map((tab) => tab.key)}
-                strategy={horizontalListSortingStrategy}
-              >
-                <div style={tabsList}>
-                  {tabs.map((tab) => {
-                    const Icon = getTabIcon(tab);
+                  return (
+                    <SortableTab key={tab.key} id={tab.key}>
+                      <Link
+                        href={tab.href}
+                        style={isActiveTab(tab.href) ? activeTabStyle : tabStyle}
+                      >
+                        <Icon size={16} />
+                        <span>{tab.label}</span>
+                      </Link>
+                    </SortableTab>
+                  );
+                })}
 
-                    return (
-                      <SortableTab key={tab.key} id={tab.key}>
-                        <Link
-                          href={tab.href}
-                          onContextMenu={(e) => {
-                            if (!tab.isCustom) return;
-
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            setContextMenu({
-                              tab,
-                              x: e.clientX,
-                              y: e.clientY,
-                            });
-                          }}
-                          style={
-                            tab.isCustom
-                              ? isActiveTab(tab.href)
-                                ? activeCustomTabStyle
-                                : customTabStyle
-                              : isActiveTab(tab.href)
-                              ? activeTabStyle
-                              : tabStyle
-                          }
-                        >
-                          <Icon size={16} />
-                          <span>{tab.label}</span>
-                        </Link>
-                      </SortableTab>
-                    );
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </div>
-
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowCreateTab(!showCreateTab);
-              }}
-              style={plusBtn}
-            >
-              +
-            </button>
-
-            {showCreateTab && (
-              <div style={createMenu} onClick={(e) => e.stopPropagation()}>
-                <input
-                  placeholder="Nom de l'onglet"
-                  value={newTabTitle}
-                  onChange={(e) => setNewTabTitle(e.target.value)}
-                  style={input}
-                />
-
-                <button onClick={createCustomPage} style={btn}>
-                  Créer une page vierge
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowOtherMenu(!showOtherMenu);
+                  }}
+                  style={otherBtn}
+                >
+                  Autre ▾
                 </button>
+
+                {showOtherMenu && (
+                  <div style={otherMenu} onClick={(e) => e.stopPropagation()}>
+                    {tabs.filter((tab) => tab.isCustom).length === 0 ? (
+                      <div style={emptyOther}>Aucune page</div>
+                    ) : (
+                      tabs
+                        .filter((tab) => tab.isCustom)
+                        .map((tab) => (
+                          <Link
+                            key={tab.key}
+                            href={tab.href}
+                            onClick={() => setShowOtherMenu(false)}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+
+                              setContextMenu({
+                                tab,
+                                x: e.clientX,
+                                y: e.clientY,
+                              });
+                            }}
+                            style={
+                              isActiveTab(tab.href)
+                                ? activeOtherMenuItem
+                                : otherMenuItem
+                            }
+                          >
+                            {tab.label}
+                          </Link>
+                        ))
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          </SortableContext>
+        </DndContext>
       </div>
 
-      {contextMenu && (
-        <div
-          style={{
-            ...contextMenuStyle,
-            left: contextMenu.x,
-            top: contextMenu.y,
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowCreateTab(!showCreateTab);
           }}
-          onClick={(e) => e.stopPropagation()}
+          style={plusBtn}
         >
-          <button
-            style={contextMenuItem}
-            onClick={() => {
-              setRenamingTab(contextMenu.tab);
-              setRenameValue(contextMenu.tab.label);
-              setContextMenu(null);
-            }}
-          >
-            Renommer
-          </button>
+          +
+        </button>
 
-          <button
-            style={{ ...contextMenuItem, color: "red" }}
-            onClick={() => deleteCustomTab(contextMenu.tab)}
-          >
-            Supprimer
-          </button>
-
-          <button style={contextMenuItem} onClick={() => setContextMenu(null)}>
-            Annuler
-          </button>
-        </div>
-      )}
-
-      {renamingTab && (
-        <div style={modalOverlay}>
-          <div style={modal}>
-            <h3>Renommer l’onglet</h3>
-
+        {showCreateTab && (
+          <div style={createMenu} onClick={(e) => e.stopPropagation()}>
             <input
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Nom de l'onglet"
+              value={newTabTitle}
+              onChange={(e) => setNewTabTitle(e.target.value)}
               style={input}
             />
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <button onClick={renameCustomTab} style={btn}>
-                Enregistrer
-              </button>
+            <button onClick={createCustomPage} style={btn}>
+              Créer une page vierge
+            </button>
+          </div>
+        )}
+      </div>
 
-              <button
-                onClick={() => {
-                  setRenamingTab(null);
-                  setRenameValue("");
-                }}
-                style={secondaryBtn}
-              >
-                Annuler
-              </button>
-            </div>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          style={accountBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowAccountMenu(!showAccountMenu);
+          }}
+        >
+          Mon compte ▾
+        </button>
+
+        {showAccountMenu && (
+          <div style={accountMenu} onClick={(e) => e.stopPropagation()}>
+            <button style={accountMenuItem} onClick={() => router.push("/dashboard")}>
+              Mes projets
+            </button>
+
+            <button style={accountMenuItem} onClick={() => router.push("/archives")}>
+              Archives
+            </button>
+
+            <button style={accountMenuItem} onClick={() => router.push("/myaccount")}>
+              Mon compte
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+
+    {contextMenu && (
+      <div
+        style={{
+          ...contextMenuStyle,
+          left: contextMenu.x,
+          top: contextMenu.y,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          style={contextMenuItem}
+          onClick={() => {
+            setRenamingTab(contextMenu.tab);
+            setRenameValue(contextMenu.tab.label);
+            setContextMenu(null);
+          }}
+        >
+          Renommer
+        </button>
+
+        <button
+          style={{ ...contextMenuItem, color: "red" }}
+          onClick={() => deleteCustomTab(contextMenu.tab)}
+        >
+          Supprimer
+        </button>
+
+        <button style={contextMenuItem} onClick={() => setContextMenu(null)}>
+          Annuler
+        </button>
+      </div>
+    )}
+
+    {renamingTab && (
+      <div style={modalOverlay}>
+        <div style={modal}>
+          <h3>Renommer l’onglet</h3>
+
+          <input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            style={input}
+          />
+
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <button onClick={renameCustomTab} style={btn}>
+              Enregistrer
+            </button>
+
+            <button
+              onClick={() => {
+                setRenamingTab(null);
+                setRenameValue("");
+              }}
+              style={secondaryBtn}
+            >
+              Annuler
+            </button>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
-      <div style={{ padding: 30 }}>{children}</div>
-    </div>
-  );
+    <div style={pageContent}>{children}</div>
+  </div>
+);
 }
+
 
 function SortableTab({
   id,
@@ -476,10 +535,10 @@ function SortableTab({
 
 const tabsBar = {
   padding: 15,
-  borderBottom: "1px solid #ddd",
+  borderBottom: "1px solid #DED8CE",
   position: "sticky" as const,
   top: 70,
-  background: "white",
+  background: "#F4F1EC",
   zIndex: 998,
 };
 
@@ -492,6 +551,7 @@ const tabsRow = {
 const scrollTabs = {
   flex: 1,
   overflowX: "auto" as const,
+  overflowY: "visible" as const,
   paddingBottom: 4,
 };
 
@@ -502,57 +562,63 @@ const tabsList = {
 
 const tabStyle = {
   padding: "8px 12px",
-  borderRadius: 8,
+  borderRadius: 10,
   textDecoration: "none",
-  color: "#555",
+  color: "#222222",
+  background: "#FAFAF8",
+  border: "1px solid #DED8CE",
   display: "flex",
   alignItems: "center",
   gap: 6,
   whiteSpace: "nowrap" as const,
+  fontWeight: 600,
 };
 
 const activeTabStyle = {
   ...tabStyle,
-  background: "black",
-  color: "white",
+  background: "#6E8570",
+  color: "#FAFAF8",
+  border: "1px solid #6E8570",
 };
 
 const customTabStyle = {
   ...tabStyle,
-  background: "#f5f5f5",
-  color: "#666",
-  border: "1px solid #eee",
+  background: "#FAFAF8",
+  color: "#6E8570",
+  border: "1px solid #A8BFA5",
 };
 
 const activeCustomTabStyle = {
   ...tabStyle,
-  background: "black",
-  color: "white",
-  border: "1px solid black",
+  background: "#A8BFA5",
+  color: "#222222",
+  border: "1px solid #A8BFA5",
 };
 
 const backButton = {
   width: 38,
   height: 38,
   borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "white",
+  border: "1px solid #DED8CE",
+  background: "#FAFAF8",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   textDecoration: "none",
-  color: "#444",
+  color: "#222222",
   flexShrink: 0,
 };
 
 const plusBtn = {
   width: 34,
   height: 34,
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "white",
+  borderRadius: 10,
+  border: "1px solid #DED8CE",
+  background: "#FAFAF8",
+  color: "#222222",
   cursor: "pointer",
   fontSize: 20,
+  fontWeight: 700,
   flexShrink: 0,
 };
 
@@ -562,39 +628,111 @@ const createMenu = {
   top: 42,
   width: 260,
   padding: 12,
-  border: "1px solid #ddd",
-  borderRadius: 12,
-  background: "white",
-  boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
+  border: "1px solid #DED8CE",
+  borderRadius: 14,
+  background: "#FAFAF8",
+  boxShadow: "0 12px 30px rgba(34,34,34,0.12)",
   zIndex: 9999,
+};
+
+const accountMenu = {
+  position: "absolute" as const,
+  right: 0,
+  top: 44,
+  width: 180,
+  background: "#FAFAF8",
+  border: "1px solid #DED8CE",
+  borderRadius: 14,
+  overflow: "hidden",
+  boxShadow: "0 12px 30px rgba(34,34,34,0.12)",
+  zIndex: 99999,
+};
+
+const accountMenuItem = {
+  width: "100%",
+  border: "none",
+  background: "#FAFAF8",
+  color: "#222222",
+  padding: "12px 16px",
+  textAlign: "left" as const,
+  cursor: "pointer",
+  fontWeight: 600,
 };
 
 const input = {
   padding: 10,
   width: "100%",
-  border: "1px solid #ddd",
-  borderRadius: 8,
+  border: "1px solid #DED8CE",
+  borderRadius: 10,
+  background: "#FAFAF8",
+  color: "#222222",
   boxSizing: "border-box" as const,
+};
+
+const otherBtn = {
+  padding: "8px 12px",
+  borderRadius: 10,
+  border: "1px solid #DED8CE",
+  background: "#FAFAF8",
+  color: "#222222",
+  cursor: "pointer",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const,
+};
+
+const otherMenu = {
+  position: "fixed" as const,
+  top: 64,
+  left: "auto",
+  width: 220,
+  padding: 8,
+  border: "1px solid #DED8CE",
+  borderRadius: 14,
+  background: "#FAFAF8",
+  boxShadow: "0 12px 30px rgba(34,34,34,0.12)",
+  zIndex: 99999,
+};
+
+const otherMenuItem = {
+  display: "block",
+  padding: "10px 12px",
+  borderRadius: 10,
+  textDecoration: "none",
+  color: "#222222",
+  fontWeight: 600,
+};
+
+const activeOtherMenuItem = {
+  ...otherMenuItem,
+  background: "#6E8570",
+  color: "#FAFAF8",
+};
+
+const emptyOther = {
+  padding: "10px 12px",
+  color: "#8A8A7A",
+  fontSize: 14,
 };
 
 const btn = {
   padding: "10px 12px",
-  background: "black",
-  color: "white",
+  background: "#222222",
+  color: "#FAFAF8",
   border: "none",
-  borderRadius: 8,
+  borderRadius: 10,
   marginTop: 10,
   cursor: "pointer",
   width: "100%",
+  fontWeight: 600,
 };
 
 const contextMenuStyle = {
   position: "fixed" as const,
   width: 180,
-  background: "white",
-  border: "1px solid #ddd",
-  borderRadius: 10,
-  boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+  background: "#FAFAF8",
+  border: "1px solid #DED8CE",
+  borderRadius: 12,
+  boxShadow: "0 12px 30px rgba(34,34,34,0.15)",
   overflow: "hidden",
   zIndex: 99999,
 };
@@ -604,7 +742,8 @@ const contextMenuItem = {
   width: "100%",
   padding: "10px 12px",
   border: "none",
-  background: "white",
+  background: "#FAFAF8",
+  color: "#222222",
   textAlign: "left" as const,
   cursor: "pointer",
 };
@@ -612,7 +751,7 @@ const contextMenuItem = {
 const modalOverlay = {
   position: "fixed" as const,
   inset: 0,
-  background: "rgba(0,0,0,0.35)",
+  background: "rgba(34,34,34,0.35)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -622,16 +761,63 @@ const modalOverlay = {
 const modal = {
   width: 360,
   padding: 20,
-  borderRadius: 14,
-  background: "white",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+  borderRadius: 16,
+  background: "#FAFAF8",
+  color: "#222222",
+  boxShadow: "0 20px 60px rgba(34,34,34,0.25)",
 };
 
 const secondaryBtn = {
   padding: "10px 12px",
-  background: "white",
-  color: "black",
-  border: "1px solid #ddd",
-  borderRadius: 8,
+  background: "#FAFAF8",
+  color: "#222222",
+  border: "1px solid #DED8CE",
+  borderRadius: 10,
   cursor: "pointer",
+  fontWeight: 600,
+};
+
+const projectTopBar = {
+  height: 76,
+  padding: "0 28px",
+  background: "#F4F1EC",
+  borderBottom: "1px solid #DED8CE",
+  display: "flex",
+  alignItems: "center",
+  gap: 22,
+  position: "sticky" as const,
+  top: 0,
+  zIndex: 1000,
+};
+
+const brand = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  textDecoration: "none",
+  color: "#222222",
+  flexShrink: 0,
+};
+
+const brandName = {
+  fontSize: 22,
+  fontWeight: 800,
+  letterSpacing: "-0.5px",
+};
+
+const accountBtn = {
+  padding: "9px 14px",
+  borderRadius: 999,
+  border: "1px solid #DED8CE",
+  background: "#FAFAF8",
+  color: "#222222",
+  cursor: "pointer",
+  fontWeight: 600,
+  flexShrink: 0,
+};
+
+const pageContent = {
+  padding: 30,
+  background: "#F4F1EC",
+  minHeight: "calc(100vh - 76px)",
 };
