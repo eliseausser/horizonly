@@ -2190,8 +2190,8 @@ const calendarWrapper = {
   border: "1px solid #DED8CE",
   borderRadius: 18,
   background: "#FAFAF8",
-  overflowX: "auto",
-  overflowY: "auto",
+  overflowX: "auto" as const,
+  overflowY: "auto" as const,
   maxHeight: 820,
 };
 
