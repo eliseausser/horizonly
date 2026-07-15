@@ -45,6 +45,15 @@ type HoveredActivity = Activity & {
   y: number;
 };
 
+type CalendarDragPreview = {
+  title: string;
+  type: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  x: number;
+  y: number;
+};
+
 type Activity = {
   id: string;
   day_id: string;
@@ -103,7 +112,8 @@ export default function Planning() {
 
   const [weekStartDate, setWeekStartDate] = useState<Date | null>(null);
   const [nowTick, setNowTick] = useState(new Date());
-  const [calendarDragPreview, setCalendarDragPreview] = useState<any | null>(null);
+  const [calendarDragPreview, setCalendarDragPreview] =
+  useState<CalendarDragPreview | null>(null);
   const [hoveredActivity, setHoveredActivity] = useState<HoveredActivity | null>(null);
 
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
