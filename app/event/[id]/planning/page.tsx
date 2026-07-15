@@ -40,6 +40,11 @@ type EventDay = {
   date: string | null;
 };
 
+type HoveredActivity = Activity & {
+  x: number;
+  y: number;
+};
+
 type Activity = {
   id: string;
   day_id: string;
@@ -99,7 +104,7 @@ export default function Planning() {
   const [weekStartDate, setWeekStartDate] = useState<Date | null>(null);
   const [nowTick, setNowTick] = useState(new Date());
   const [calendarDragPreview, setCalendarDragPreview] = useState<any | null>(null);
-  const [hoveredActivity, setHoveredActivity] = useState<any | null>(null);
+  const [hoveredActivity, setHoveredActivity] = useState<HoveredActivity | null>(null);
 
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -1270,15 +1275,15 @@ setSelectedBookingId("");
                           onMouseMove={(event) => {
                             if (!overlapping) return;
 
-                            setHoveredActivity((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    x: event.clientX,
-                                    y: event.clientY,
-                                  }
-                                : null
-                            );
+setHoveredActivity((prev) =>
+  prev
+    ? {
+        ...prev,
+        x: event.clientX,
+        y: event.clientY,
+      }
+    : null
+);
                           }}
                           onMouseLeave={() => {
                             if (hoveredActivity?.id === activity.id) {
