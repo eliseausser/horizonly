@@ -64,6 +64,7 @@ type Activity = {
   end_time: string | null;
   position: number;
   booking_id: string | null;
+  price: number | null;
   booking?: any;
 
 };
@@ -106,6 +107,7 @@ export default function Planning() {
   const [activityEnd, setActivityEnd] = useState("");
   const [activityType, setActivityType] = useState("activite");
   const [selectedBookingId, setSelectedBookingId] = useState("");
+  const [activityPrice, setActivityPrice] = useState("");
 
   const [calendarCreateSlot, setCalendarCreateSlot] =
     useState<CalendarCreateSlot | null>(null);
@@ -122,6 +124,7 @@ export default function Planning() {
   const [editEnd, setEditEnd] = useState("");
   const [description, setDescription] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editPrice, setEditPrice] = useState("");
 
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [openActivityMenuId, setOpenActivityMenuId] = useState<string | null>(null);
@@ -261,47 +264,60 @@ function handleDragStart(event: DragStartEvent) {
     const activeType = active.data.current?.type;
     const overType = over.data.current?.type;
 
-    if (activeType === "day") {
-      const overDayId =
-        overType === "day" ? overId : over.data.current?.dayId;
+if (activeType === "day") {
+  const overDayId =
+    overType === "day" ? overId : over.data.current?.dayId;
 
-      if (!overDayId) {
-        resetDrag();
-        return;
-      }
+  if (!overDayId) {
+    resetDrag();
+    return;
+  }
 
-      const oldIndex = days.findIndex((day) => day.id === activeId);
-      const newIndex = days.findIndex((day) => day.id === overDayId);
+  const oldIndex = days.findIndex((day) => day.id === activeId);
+  const newIndex = days.findIndex((day) => day.id === overDayId);
 
-      if (oldIndex === -1 || newIndex === -1) {
-        resetDrag();
-        return;
-      }
+  if (oldIndex === -1 || newIndex === -1) {
+    resetDrag();
+    return;
+  }
 
-      const newDays = arrayMove(days, oldIndex, newIndex).map((day, index) => ({
-        ...day,
-        day_number: index + 1,
-      }));
+  // On conserve les dates correspondant aux positions actuelles
+  const datesByPosition = days.map((day) => day.date);
 
-      setDays(newDays);
+  // On déplace les jours
+  const reorderedDays = arrayMove(days, oldIndex, newIndex);
 
-      const results = await Promise.all(
-        newDays.map((day) =>
-          supabase
-            .from("event_days")
-            .update({ day_number: day.day_number })
-            .eq("id", day.id)
-        )
-      );
+  // Chaque nouvelle position récupère la date de cette position
+  const newDays = reorderedDays.map((day, index) => ({
+    ...day,
+    day_number: index + 1,
+    date: datesByPosition[index] || null,
+  }));
 
-      if (results.some((result) => result.error)) {
-        console.error("drag days update error:", results);
-        await loadData();
-      }
+  // Mise à jour immédiate de l'affichage
+  setDays(newDays);
 
-      resetDrag();
-      return;
-    }
+  // Mise à jour dans Supabase
+  const results = await Promise.all(
+    newDays.map((day) =>
+      supabase
+        .from("event_days")
+        .update({
+          day_number: day.day_number,
+          date: day.date,
+        })
+        .eq("id", day.id)
+    )
+  );
+
+  if (results.some((result) => result.error)) {
+    console.error("drag days update error:", results);
+    await loadData();
+  }
+
+  resetDrag();
+  return;
+}
 
     if (activeType === "activity") {
       const moved = activities.find((activity) => activity.id === activeId);
@@ -466,6 +482,7 @@ function handleDragStart(event: DragStartEvent) {
     end_time: activityEnd || null,
     position: dayActivities.length,
     booking_id: selectedBookingId || null,
+    price: activityPrice ? Number(activityPrice) : null,
   },
 ])
       .select()
@@ -475,6 +492,27 @@ function handleDragStart(event: DragStartEvent) {
       console.error("addActivity error:", error.message);
       return;
     }
+
+if (activityPrice && Number(activityPrice) > 0) {
+  const { error: budgetError } = await supabase
+    .from("budget_items")
+    .insert([
+      {
+        event_id: eventId,
+        title: activityTitle.trim(),
+        amount: Number(activityPrice),
+	category: activityType,
+        activity_id: data.id,
+      },
+    ]);
+
+  if (budgetError) {
+    console.error(
+      "Erreur création dépense activité :",
+      budgetError.message
+    );
+  }
+}
 
 const selectedBooking = bookings.find(
   (booking) => booking.id === selectedBookingId
@@ -494,23 +532,43 @@ setActivities((prev) => [
     setActivityType("activite");
     setSelectedDay(null);
     setSelectedBookingId("");
+    setActivityPrice("");
   }
 
-  async function deleteActivity(activityId: string) {
-    const { error } = await supabase
-      .from("activities")
-      .delete()
-      .eq("id", activityId);
+async function deleteActivity(activityId: string) {
+  // 1. Supprimer la dépense liée à l'activité
+  const { error: budgetError } = await supabase
+    .from("budget_items")
+    .delete()
+    .eq("activity_id", activityId);
 
-    if (error) {
-      console.error("deleteActivity Supabase error:", error.message);
-      return;
-    }
-
-    setActivities((prev) =>
-      prev.filter((activity) => activity.id !== activityId)
+  if (budgetError) {
+    console.error(
+      "Erreur suppression dépense liée :",
+      budgetError.message
     );
+    return;
   }
+
+  // 2. Supprimer l'activité
+  const { error } = await supabase
+    .from("activities")
+    .delete()
+    .eq("id", activityId);
+
+  if (error) {
+    console.error(
+      "deleteActivity Supabase error:",
+      error.message
+    );
+    return;
+  }
+
+  // 3. Retirer l'activité de l'affichage
+  setActivities((prev) =>
+    prev.filter((activity) => activity.id !== activityId)
+  );
+}
 
 async function attachBookingToActivity(activityId: string, bookingId: string) {
   const booking = bookings.find((item) => item.id === bookingId);
@@ -539,14 +597,18 @@ async function attachBookingToActivity(activityId: string, bookingId: string) {
 async function updateActivity(activityId: string) {
   if (!editTitle.trim()) return;
 
+  const newPrice = editPrice ? Number(editPrice) : 0;
+
   const updates = {
     title: editTitle.trim(),
     description: editDescription.trim() || null,
     type: editType,
     start_time: normalizeTime(editStart),
     end_time: normalizeTime(editEnd),
+    price: newPrice > 0 ? newPrice : null,
   };
 
+  // 1. Mise à jour de l'activité
   const { data, error } = await supabase
     .from("activities")
     .update(updates)
@@ -563,18 +625,95 @@ async function updateActivity(activityId: string) {
     return;
   }
 
+  // 2. Recherche de la dépense liée à cette activité
+  const { data: existingBudgetItem, error: budgetSearchError } =
+    await supabase
+      .from("budget_items")
+      .select("id")
+      .eq("activity_id", activityId)
+      .maybeSingle();
+
+  if (budgetSearchError) {
+    console.error(
+      "Erreur recherche dépense activité :",
+      budgetSearchError.message
+    );
+  } else {
+    // 3A. Nouveau prix > 0 ET dépense déjà existante
+    // -> on met à jour la dépense
+    if (newPrice > 0 && existingBudgetItem) {
+      const { error: budgetUpdateError } = await supabase
+        .from("budget_items")
+        .update({
+          title: editTitle.trim(),
+          amount: newPrice,
+	  category: editType,
+        })
+        .eq("id", existingBudgetItem.id);
+
+      if (budgetUpdateError) {
+        console.error(
+          "Erreur mise à jour dépense :",
+          budgetUpdateError.message
+        );
+      }
+    }
+
+    // 3B. Nouveau prix > 0 mais aucune dépense
+    // -> on crée la dépense
+    if (newPrice > 0 && !existingBudgetItem) {
+      const { error: budgetInsertError } = await supabase
+        .from("budget_items")
+        .insert([
+          {
+            event_id: eventId,
+            activity_id: activityId,
+            title: editTitle.trim(),
+            amount: newPrice,
+	    category: editType,
+          },
+        ]);
+
+      if (budgetInsertError) {
+        console.error(
+          "Erreur création dépense :",
+          budgetInsertError.message
+        );
+      }
+    }
+
+    // 3C. Prix supprimé / mis à 0
+    // -> on supprime la dépense liée
+    if (newPrice <= 0 && existingBudgetItem) {
+      const { error: budgetDeleteError } = await supabase
+        .from("budget_items")
+        .delete()
+        .eq("id", existingBudgetItem.id);
+
+      if (budgetDeleteError) {
+        console.error(
+          "Erreur suppression dépense :",
+          budgetDeleteError.message
+        );
+      }
+    }
+  }
+
+  // 4. Mise à jour de l'affichage
   setActivities((prev) =>
     prev.map((activity) =>
       activity.id === activityId ? data : activity
     )
   );
 
+  // 5. Fermeture / reset du formulaire
   setEditingActivityId(null);
   setEditTitle("");
   setEditDescription("");
   setEditStart("");
   setEditEnd("");
   setEditType("activite");
+  setEditPrice("");
 }
 
 async function detachBookingFromActivity(activityId: string) {
@@ -675,56 +814,80 @@ async function updateActivityFromCalendar(
 
     setActivityTitle("");
     setActivityType("activite");
+    setActivityPrice("");
   }
 
-  async function createActivityFromCalendar() {
-    if (!calendarCreateSlot || !activityTitle.trim()) return;
+async function createActivityFromCalendar() {
+  if (!calendarCreateSlot || !activityTitle.trim()) return;
 
-    const dayActivities = activitiesByDay[calendarCreateSlot.dayId] || [];
+  const dayActivities =
+    activitiesByDay[calendarCreateSlot.dayId] || [];
 
-    const { data, error } = await supabase
-      .from("activities")
+  const { data, error } = await supabase
+    .from("activities")
+    .insert([
+      {
+        day_id: calendarCreateSlot.dayId,
+        title: activityTitle.trim(),
+        description: description.trim() || null,
+        type: activityType,
+        start_time: calendarCreateSlot.start,
+        end_time: calendarCreateSlot.end,
+        position: dayActivities.length,
+        booking_id: selectedBookingId || null,
+        price: activityPrice ? Number(activityPrice) : null,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error("createActivityFromCalendar error:", error.message);
+    return;
+  }
+
+  // Si un prix a été renseigné,
+  // création automatique d'une dépense dans le budget
+  if (activityPrice && Number(activityPrice) > 0) {
+    const { error: budgetError } = await supabase
+      .from("budget_items")
       .insert([
         {
-          day_id: calendarCreateSlot.dayId,
+          event_id: eventId,
           title: activityTitle.trim(),
-	  description,
-          type: activityType,
-          start_time: calendarCreateSlot.start,
-          end_time: calendarCreateSlot.end,
-          position: dayActivities.length,
-          booking_id: selectedBookingId || null,
+          amount: Number(activityPrice),
+	  category: activityType,
+          activity_id: data.id,
         },
-      ])
-      .select()
-      .single();
+      ]);
 
-    if (error) {
-      console.error(error.message);
-      return;
+    if (budgetError) {
+      console.error(
+        "Erreur création dépense activité :",
+        budgetError.message
+      );
     }
-
-    const booking = bookings.find(
-  (b) => b.id === selectedBookingId
-);
-
-const selectedBooking = bookings.find(
-  (booking) => booking.id === selectedBookingId
-);
-
-setActivities((prev) => [
-  ...prev,
-  {
-    ...data,
-    booking: selectedBooking || null,
-  },
-]);
-    setCalendarCreateSlot(null);
-    setActivityTitle("");
-    setActivityType("activite");
-setDescription("");
-setSelectedBookingId("");
   }
+
+  const selectedBooking = bookings.find(
+    (booking) => booking.id === selectedBookingId
+  );
+
+  setActivities((prev) => [
+    ...prev,
+    {
+      ...data,
+      booking: selectedBooking || null,
+    },
+  ]);
+
+  setCalendarCreateSlot(null);
+  setActivityTitle("");
+  setActivityType("activite");
+  setActivityPrice("");
+  setDescription("");
+  setSelectedBookingId("");
+}
 
   async function moveCalendarActivity(
     activity: Activity,
@@ -1050,6 +1213,8 @@ setSelectedBookingId("");
   openActivityMenuId={openActivityMenuId}
   setOpenActivityMenuId={setOpenActivityMenuId}
   formatTime={formatTime}
+  editPrice={editPrice}
+setEditPrice={setEditPrice}
 />
                             ))}
                           </SortableContext>
@@ -1069,6 +1234,16 @@ setSelectedBookingId("");
   value={description}
   onChange={(event) => setDescription(event.target.value)}
   style={textarea}
+/>
+
+<input
+  type="number"
+  min="0"
+  step="0.01"
+  placeholder="Prix (€) - optionnel"
+  value={activityPrice}
+  onChange={(event) => setActivityPrice(event.target.value)}
+  style={input}
 />
 
 <TimePicker
@@ -1481,6 +1656,16 @@ setHoveredActivity((prev) =>
   style={textarea}
 />
 
+<input
+  type="number"
+  min="0"
+  step="0.01"
+  placeholder="Prix (€) - optionnel"
+  value={activityPrice}
+  onChange={(event) => setActivityPrice(event.target.value)}
+  style={input}
+/>
+
             <select
               value={activityType}
               onChange={(event) => setActivityType(event.target.value)}
@@ -1515,11 +1700,13 @@ setHoveredActivity((prev) =>
             <button
               style={smallBtn}
               onClick={() => {
-                setCalendarCreateSlot(null);
-                setActivityTitle("");
-		setSelectedBookingId("");
-		setBookingSearch("");
-              }}
+  setCalendarCreateSlot(null);
+  setActivityTitle("");
+  setActivityPrice("");
+  setDescription("");
+  setSelectedBookingId("");
+  setBookingSearch("");
+}}
             >
               Annuler
             </button>
@@ -1710,6 +1897,8 @@ function SortableItem({
   detachBookingFromActivity,
   bookingSearch,
   setBookingSearch,
+  editPrice,
+  setEditPrice,
 }: any) {
   const { setNodeRef, attributes, listeners, transform, transition } =
     useSortable({
@@ -1881,6 +2070,11 @@ const filteredBookings = bookings.filter((booking: any) => {
                     setEditDescription(activity.description || "");
                     setOpenActivityMenuId(null);
                     setBookingSearchActivityId(null);
+		    setEditPrice(
+  activity.price !== null && activity.price !== undefined
+    ? String(activity.price)
+    : ""
+);
                   }}
                 >
                   Modifier
@@ -1923,6 +2117,16 @@ const filteredBookings = bookings.filter((booking: any) => {
             onChange={(event) => setEditDescription(event.target.value)}
             style={textarea}
           />
+
+<input
+  type="number"
+  min="0"
+  step="0.01"
+  placeholder="Prix (€) - optionnel"
+  value={editPrice}
+  onChange={(event) => setEditPrice(event.target.value)}
+  style={input}
+/>
 
           <TimePicker
             value={editStart}

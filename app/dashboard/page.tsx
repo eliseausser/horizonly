@@ -310,32 +310,34 @@ function renderEventCard(event: any) {
           </select>
 
 <DatePicker
-  selected={stringToDate(editStartDate)}
+  selected={stringToDate(startDate)}
   onChange={(date: Date | null) => {
     if (!date) return;
 
     const value = dateToString(date);
-    setEditStartDate(value);
+    setStartDate(value);
 
-    if (editEndDate && value > editEndDate) {
-      setEditEndDate("");
+    if (endDate && value > endDate) {
+      setEndDate("");
     }
   }}
   dateFormat="dd/MM/yyyy"
   locale={fr}
   placeholderText="Date de début"
+  customInput={<input style={input} />}
 />
 
 <DatePicker
-  selected={stringToDate(editEndDate)}
+  selected={stringToDate(endDate)}
   onChange={(date: Date | null) => {
     if (!date) return;
-    setEditEndDate(dateToString(date));
+    setEndDate(dateToString(date));
   }}
-  minDate={stringToDate(editStartDate) || undefined}
+  minDate={stringToDate(startDate) || undefined}
   dateFormat="dd/MM/yyyy"
   locale={fr}
   placeholderText="Date de fin"
+  customInput={<input style={input} />}
 />
           <input
             type="number"
@@ -398,9 +400,23 @@ const hasProjects =
 return (
   <div style={page}>
 
+<div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 30,
+  }}
+>
+  <h1 style={{ margin: 0 }}>Mes projets</h1>
+
+  <button onClick={() => setShowForm(true)} style={btn}>
+    Nouveau projet
+  </button>
+</div>
+
       {showForm && (
         <div style={formCard}>
-          <h2>Créer un projet</h2>
 
           <input
             value={title}
@@ -456,12 +472,15 @@ return (
             style={input}
           />
 
-          <button onClick={handleCreateEvent} style={btn}>
-            Créer le projet
-          </button>
-        </div>
-      )}
+<button
+  onClick={handleCreateEvent}
+  style={{ ...btn, width: "100%" }}
+>
+  Créer
+</button>
 
+</div>
+)}
 
 
 {!hasProjects ? (
@@ -542,7 +561,6 @@ const emptyDashboardText = {
 const input = {
   width: "100%",
   padding: 12,
-  marginTop: 10,
   border: "1px solid #D8D2C8",
   borderRadius: 10,
   background: "#FAFAF8",
@@ -559,6 +577,9 @@ const formCard = {
   background: "#FAFAF8",
   maxWidth: 420,
   boxShadow: "0 14px 35px rgba(34,34,34,0.06)",
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 14,
 };
 
 const smallBtn = {

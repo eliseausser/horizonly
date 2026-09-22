@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -119,27 +120,12 @@ export default function LoginPage() {
 
   return (
     <div style={page}>
+      <div style={topBrand}>
+        <img src="/logo.svg" alt="MERGE" style={brandLogo} />
+        <h1 style={brandTitle}>MERGE</h1>
+      </div>
+
       <div style={card}>
-        <div style={brand}>
-<img
-  src="/logo.svg"
-  alt="MERGE"
-  style={{
-    width: 52,
-    height: 52,
-    objectFit: "contain",
-    display: "block",
-  }}
-/>
-
-          <div>
-            <h1 style={title}>MERGE</h1>
-            <p style={subtitle}>
-              Organisez tous vos projets.
-            </p>
-          </div>
-        </div>
-
         <div style={tabs}>
           <button
             onClick={() => {
@@ -190,30 +176,44 @@ export default function LoginPage() {
 
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
+              onClick={() => setShowPassword((current) => !current)}
               style={eyeBtn}
+              aria-label={
+                showPassword
+                  ? "Masquer le mot de passe"
+                  : "Afficher le mot de passe"
+              }
+              title={
+                showPassword
+                  ? "Masquer le mot de passe"
+                  : "Afficher le mot de passe"
+              }
             >
-              {showPassword ? "🙈" : "👁️"}
+              {showPassword ? (
+                <EyeOff size={19} strokeWidth={1.8} />
+              ) : (
+                <Eye size={19} strokeWidth={1.8} />
+              )}
             </button>
           </div>
 
-<label
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 14,
-    color: "#555",
-    cursor: "pointer",
-  }}
->
-  <input
-    type="checkbox"
-    checked={staySignedIn}
-    onChange={(e) => setStaySignedIn(e.target.checked)}
-  />
-  Rester connecté
-</label>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+              color: "#555",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={staySignedIn}
+              onChange={(e) => setStaySignedIn(e.target.checked)}
+            />
+            Rester connecté
+          </label>
 
           {mode === "signup" && (
             <input
@@ -269,6 +269,8 @@ const page = {
   justifyContent: "center",
   padding: 24,
   background: "#F4F1EC",
+  position: "relative" as const,
+  boxSizing: "border-box" as const,
 };
 
 const card = {
@@ -281,38 +283,27 @@ const card = {
   border: "1px solid rgba(110,133,112,0.18)",
 };
 
-const brand = {
+const topBrand = {
+  position: "absolute" as const,
+  top: 24,
+  left: 32,
   display: "flex",
-  gap: 16,
   alignItems: "center",
-  marginBottom: 28,
+  gap: 12,
 };
 
-const logo = {
+const brandLogo = {
   width: 52,
   height: 52,
-  borderRadius: 16,
-  background: "black",
-  color: "white",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontWeight: 900,
-  fontSize: 24,
+  objectFit: "contain" as const,
+  display: "block",
 };
 
-const title = {
+const brandTitle = {
   margin: 0,
-  fontSize: 28,
-  letterSpacing: "-1px",
-  color: "#222222",
+  fontSize: 24,
   fontWeight: 700,
-};
-
-const subtitle = {
-  margin: "6px 0 0 0",
-  color: "#6E8570",
-  lineHeight: 1.4,
+  color: "#222222",
 };
 
 const tabs = {
@@ -377,7 +368,10 @@ const eyeBtn = {
   background: "white",
   padding: "0 12px",
   cursor: "pointer",
-  fontSize: 18,
+  color: "#6E8570",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const primaryBtn = {

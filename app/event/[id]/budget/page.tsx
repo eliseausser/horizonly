@@ -135,42 +135,82 @@ async function uploadBudgetDocument(file: File) {
     setEditDocumentFile(null);
   }
 
-  async function updateItem(itemId: string) {
-    if (!editTitle.trim()) return;
+async function updateItem(itemId: string) {
+  if (!editTitle.trim()) return;
 
-    let uploadedDocument = null;
+  let uploadedDocument = null;
 
-    if (editDocumentFile) {
-      uploadedDocument = await uploadBudgetDocument(editDocumentFile);
-    }
-
-    const { error } = await supabase
-      .from("budget_items")
-      .update({
-        title: editTitle,
-        category: editCategory,
-        amount: editAmount ? Number(editAmount) : 0,
-        paid: editPaid,
-        notes: editNotes || null,
-        link: editLink || null,
-        ...(uploadedDocument
-          ? {
-              document_url: uploadedDocument.url,
-              document_name: uploadedDocument.name,
-            }
-          : {}),
-      })
-      .eq("id", itemId);
-
-    if (error) {
-      console.error(error.message);
-      return;
-    }
-
-    setEditingId(null);
-    setEditDocumentFile(null);
-    await loadData();
+  if (editDocumentFile) {
+    uploadedDocument = await uploadBudgetDocument(editDocumentFile);
   }
+
+  const newAmount = editAmount ? Number(editAmount) : 0;
+
+  // 1. On récupère la dépense pour connaître son activity_id
+  const { data: currentItem, error: currentItemError } = await supabase
+    .from("budget_items")
+    .select("activity_id")
+    .eq("id", itemId)
+    .single();
+
+  if (currentItemError) {
+    console.error(
+      "Erreur récupération dépense :",
+      currentItemError.message
+    );
+    return;
+  }
+
+  // 2. Mise à jour de la dépense
+  const { error } = await supabase
+    .from("budget_items")
+    .update({
+      title: editTitle.trim(),
+      category: editCategory,
+      amount: newAmount,
+      paid: editPaid,
+      notes: editNotes || null,
+      link: editLink || null,
+      ...(uploadedDocument
+        ? {
+            document_url: uploadedDocument.url,
+            document_name: uploadedDocument.name,
+          }
+        : {}),
+    })
+    .eq("id", itemId);
+
+  if (error) {
+    console.error("Erreur mise à jour dépense :", error.message);
+    return;
+  }
+
+  // 3. Si cette dépense vient d'une activité,
+  // on synchronise l'activité
+if (currentItem?.activity_id) {
+  const { error: activityError } = await supabase
+    .from("activities")
+    .update({
+      title: editTitle.trim(),
+      price: newAmount > 0 ? newAmount : null,
+      type: editCategory,
+    })
+    .eq("id", currentItem.activity_id);
+
+  if (activityError) {
+    console.error(
+      "Erreur synchronisation activité :",
+      activityError.message
+    );
+  }
+}
+
+  // 4. Fermeture du formulaire + rechargement
+  setEditingId(null);
+  setEditDocumentFile(null);
+
+  await loadData();
+}
 
   async function togglePaid(item: any) {
     await supabase
@@ -204,18 +244,21 @@ async function uploadBudgetDocument(file: File) {
     .filter((item) => item.paid)
     .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const remaining = totalBudget - totalSpent;
-const budgetPieData = [
+const budgetStatusData = [
   {
-    category: "Dépensé",
-    value: totalSpent,
-  },
-  {
-    category: "Restant",
-    value: remaining > 0 ? remaining : 0,
-  },
-  {
-    category: "Paye",
+    category: "paye",
+    label: "Payé",
     value: totalPaid,
+  },
+  {
+    category: "a payer",
+    label: "À payer",
+    value: Math.max(totalSpent - totalPaid, 0),
+  },
+  {
+    category: "restant",
+    label: "Restant",
+    value: Math.max(totalBudget - totalSpent, 0),
   },
 ];
 
@@ -248,7 +291,7 @@ const budgetPieData = [
         </div>
 
         <div style={summaryCard}>
-          <h3>Dépensé</h3>
+          <h3>À payer</h3>
           <p>{totalSpent} €</p>
         </div>
 
@@ -314,9 +357,10 @@ const budgetPieData = [
         <p>Aucun budget défini.</p>
       ) : (
         <PieChart
-          data={budgetPieData}
-          total={totalBudget}
-        />
+  data={budgetStatusData}
+  total={totalBudget}
+  colorMode="budget"
+/>
       )}
     </div>
   </div>
@@ -408,7 +452,13 @@ const budgetPieData = [
           <p>Aucune dépense pour le moment.</p>
         ) : (
           items.map((item) => (
-            <div key={item.id} style={card}>
+            <div
+  key={item.id}
+  style={{
+    ...card,
+    borderLeft: `6px solid ${getActivityColor(item.category)}`,
+  }}
+>
               {editingId === item.id ? (
                 <div style={{ flex: 1 }}>
                   <input
@@ -480,7 +530,15 @@ const budgetPieData = [
     )}
   </div>
 
-  <span style={badge}>{item.category}</span>
+  <span
+  style={{
+    ...badge,
+    background: getActivityColor(item.category),
+    color: "white",
+  }}
+>
+  {getCategoryLabel(item.category)}
+</span>
 
   <p>Montant : {item.amount} €</p>
 
@@ -560,6 +618,50 @@ const budgetPieData = [
   );
 }
 
+function getCategoryLabel(type?: string | null) {
+  switch (type?.toLowerCase()) {
+    case "activite":
+      return "Activité";
+    case "rdv":
+      return "Rendez-vous";
+    case "evenement":
+      return "Événement";
+    case "transport":
+      return "Transport";
+    case "repas":
+      return "Repas";
+    case "hebergement":
+      return "Hébergement";
+    default:
+      return "Autre";
+  }
+}
+
+function getActivityColor(type?: string | null) {
+  switch (type?.toLowerCase()) {
+    case "activite":
+      return "#A8BFA5";
+
+    case "rdv":
+      return "#7F9A82";
+
+    case "evenement":
+      return "#C9A66B";
+
+    case "transport":
+      return "#8FAFB9";
+
+    case "repas":
+      return "#D7B4A5";
+
+    case "hebergement":
+      return "#B7A98D";
+
+    default:
+      return "#B8B0A5";
+  }
+}
+
 function CategorySelect({
   value,
   onChange,
@@ -568,39 +670,62 @@ function CategorySelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={input}
-    >
-      <option value="transport">Transport</option>
-      <option value="logement">Logement</option>
-      <option value="nourriture">Nourriture</option>
-      <option value="activite">Activité</option>
-      <option value="prestataire">Prestataire</option>
-      <option value="autre">Autre</option>
-    </select>
+<select
+  value={value}
+  onChange={(e) => onChange(e.target.value)}
+  style={input}
+>
+  <option value="activite">Activité</option>
+  <option value="rdv">Rendez-vous</option>
+  <option value="evenement">Événement</option>
+  <option value="transport">Transport</option>
+  <option value="repas">Repas</option>
+  <option value="hebergement">Hébergement</option>
+  <option value="autre">Autre</option>
+</select>
   );
 }
 
-function PieChart({ data, total }: { data: any[]; total: number }) {
-  let cumulative = 0;
+function getBudgetStatusColor(status: string) {
+  switch (status.toLowerCase()) {
+    case "paye":
+      return "#7F9A82";
 
-  const colors = [
-    "#111",
-    "#22c55e",
-    "#3b82f6",
-    "#f59e0b",
-    "#a855f7",
-    "#ef4444",
-  ];
+    case "a payer":
+      return "#C9B99A";
+
+    case "restant":
+      return "#EEF1EB";
+
+    default:
+      return "#D9DDD5";
+  }
+}
+
+function PieChart({
+  data,
+  total,
+  colorMode = "category",
+}: {
+  data: any[];
+  total: number;
+  colorMode?: "category" | "budget";
+}) {
+  let cumulative = 0;
 
   function getCoordinates(percent: number) {
     const angle = percent * 2 * Math.PI - Math.PI / 2;
+
     return {
       x: 100 + 80 * Math.cos(angle),
       y: 100 + 80 * Math.sin(angle),
     };
+  }
+
+  function getSliceColor(category: string) {
+    return colorMode === "budget"
+      ? getBudgetStatusColor(category)
+      : getActivityColor(category);
   }
 
   return (
@@ -613,15 +738,18 @@ function PieChart({ data, total }: { data: any[]; total: number }) {
       }}
     >
       <svg width="220" height="220" viewBox="0 0 200 200">
-        {data.map((slice, index) => {
+        {data.map((slice) => {
           const value = slice.value;
+
           const startPercent = cumulative / total;
           cumulative += value;
           const endPercent = cumulative / total;
 
           const start = getCoordinates(startPercent);
           const end = getCoordinates(endPercent);
-          const largeArcFlag = endPercent - startPercent > 0.5 ? 1 : 0;
+
+          const largeArcFlag =
+            endPercent - startPercent > 0.5 ? 1 : 0;
 
           const pathData = `
             M 100 100
@@ -634,27 +762,28 @@ function PieChart({ data, total }: { data: any[]; total: number }) {
             <path
               key={slice.category}
               d={pathData}
-              fill={colors[index % colors.length]}
+              fill={getSliceColor(slice.category)}
             />
           );
         })}
       </svg>
 
       <div>
-        {data.map((slice, index) => (
+        {data.map((slice) => (
           <div key={slice.category} style={legendRow}>
             <span
               style={{
                 width: 12,
                 height: 12,
                 borderRadius: 999,
-                background: colors[index % colors.length],
+                background: getSliceColor(slice.category),
                 display: "inline-block",
               }}
             />
 
             <span>
-              {slice.category} — {slice.value} € (
+              {slice.label || getCategoryLabel(slice.category)} —{" "}
+              {slice.value} € (
               {Math.round((slice.value / total) * 100)}%)
             </span>
           </div>
@@ -663,7 +792,6 @@ function PieChart({ data, total }: { data: any[]; total: number }) {
     </div>
   );
 }
-
 const summaryCard = {
   border: "1px solid #ddd",
   borderRadius: 12,

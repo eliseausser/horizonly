@@ -20,7 +20,7 @@ export default function EventOverview() {
         .from("events")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle()
 
       if (error) {
         console.error(error.message);
