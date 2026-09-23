@@ -156,44 +156,6 @@ async function updateBooking(bookingId: string) {
   setEditingBookingId(null);
 }
 
-async function deleteBooking(bookingId: string) {
-  const confirmed = window.confirm(
-    "Voulez-vous supprimer définitivement cette réservation ?"
-  );
-
-  if (!confirmed) return;
-
-  const { error } = await supabase
-    .from("bookings")
-    .delete()
-    .eq("id", bookingId);
-
-  if (error) {
-    console.error("deleteBooking error:", error.message);
-    return;
-  }
-
-  setBookings((prev: any[]) =>
-    prev.filter((booking) => booking.id !== bookingId)
-  );
-
-  setOpenBookingMenuId(null);
-}
-
-  async function togglePaid(booking: any) {
-    const { error } = await supabase
-      .from("bookings")
-      .update({ paid: !booking.paid })
-      .eq("id", booking.id);
-
-    if (error) {
-      console.error("togglePaid error:", error.message);
-      return;
-    }
-
-    await loadBookings();
-  }
-
 useEffect(() => {
   if (!selectedBookingFromUrl || bookings.length === 0) return;
 
