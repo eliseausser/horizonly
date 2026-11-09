@@ -247,7 +247,7 @@ if (dayIds.length === 0) {
     created: 0,
     updated: 0,
     deleted: 0,
-    errors: errors + deletionErrors,
+    errors: 0,
   });
 }
 
