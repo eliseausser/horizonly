@@ -242,15 +242,14 @@ for (const deletion of pendingDeletions || []) {
 
     const dayIds = (days || []).map((day) => day.id);
 
-    if (dayIds.length === 0) {
-      return NextResponse.json({
-  created,
-  updated,
-  deleted,
-  errors: errors + deletionErrors,
-  skipped,
-});
-    }
+if (dayIds.length === 0) {
+  return NextResponse.json({
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    errors: errors + deletionErrors,
+  });
+}
 
     // =====================================================
     // 7. Récupérer les activités du projet
