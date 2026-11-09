@@ -14,80 +14,159 @@ export default function DocumentsPage() {
     loadDocuments();
   }, [id]);
 
-  async function loadDocuments() {
-    setLoading(true);
+async function loadDocuments() {
+  setLoading(true);
 
-    const allDocs: any[] = [];
+  const allDocs: any[] = [];
 
-    const { data: budgetItems } = await supabase
-      .from("budget_items")
-      .select("id, title, document_url, document_name, link, created_at")
-      .eq("event_id", id);
+  // =====================================================
+  // DOCUMENTS ET LIENS DU BUDGET
+  // =====================================================
 
-    (budgetItems || []).forEach((item) => {
-      if (item.document_url) {
-        allDocs.push({
-          id: `budget-doc-${item.id}`,
-          name: item.document_name || item.title || "Document budget",
-          url: item.document_url,
-          source: "Budget",
-          relatedTitle: item.title,
-          created_at: item.created_at,
-        });
-      }
+  const { data: budgetItems, error: budgetError } = await supabase
+    .from("budget_items")
+    .select(
+      "id, title, document_url, document_name, link, created_at"
+    )
+    .eq("event_id", id);
 
-      if (item.link) {
-        allDocs.push({
-          id: `budget-link-${item.id}`,
-          name: item.title || "Lien budget",
-          url: item.link,
-          source: "Budget",
-          relatedTitle: item.title,
-          created_at: item.created_at,
-          isLink: true,
-        });
-      }
-    });
-
-    const { data: bookings } = await supabase
-      .from("bookings")
-      .select("id, name, document_url, document_name, link, created_at")
-      .eq("event_id", id);
-
-    (bookings || []).forEach((booking) => {
-      if (booking.document_url) {
-        allDocs.push({
-          id: `booking-doc-${booking.id}`,
-          name: booking.document_name || booking.name || "Document booking",
-          url: booking.document_url,
-          source: "Bookings",
-          relatedTitle: booking.name,
-          created_at: booking.created_at,
-        });
-      }
-
-      if (booking.link) {
-        allDocs.push({
-          id: `booking-link-${booking.id}`,
-          name: booking.name || "Lien booking",
-          url: booking.link,
-          source: "Bookings",
-          relatedTitle: booking.name,
-          created_at: booking.created_at,
-          isLink: true,
-        });
-      }
-    });
-
-    allDocs.sort(
-      (a, b) =>
-        new Date(b.created_at || 0).getTime() -
-        new Date(a.created_at || 0).getTime()
+  if (budgetError) {
+    console.error(
+      "Erreur chargement documents Budget :",
+      budgetError.message
     );
-
-    setDocuments(allDocs);
-    setLoading(false);
   }
+
+  (budgetItems || []).forEach((item) => {
+    if (item.document_url) {
+      allDocs.push({
+        id: `budget-doc-${item.id}`,
+        name:
+          item.document_name ||
+          item.title ||
+          "Document budget",
+        url: item.document_url,
+        source: "Budget",
+        relatedTitle: item.title,
+        created_at: item.created_at,
+      });
+    }
+
+    if (item.link) {
+      allDocs.push({
+        id: `budget-link-${item.id}`,
+        name: item.title || "Lien budget",
+        url: item.link,
+        source: "Budget",
+        relatedTitle: item.title,
+        created_at: item.created_at,
+        isLink: true,
+      });
+    }
+  });
+
+  // =====================================================
+  // RÉSERVATIONS DU PROJET
+  // =====================================================
+
+  const { data: bookings, error: bookingsError } =
+    await supabase
+      .from("bookings")
+      .select("id, name, created_at")
+      .eq("event_id", id);
+
+  if (bookingsError) {
+    console.error(
+      "Erreur chargement réservations :",
+      bookingsError.message
+    );
+  }
+
+  const bookingIds = (bookings || []).map(
+    (booking) => booking.id
+  );
+
+  const bookingsById = new Map(
+    (bookings || []).map((booking) => [
+      booking.id,
+      booking,
+    ])
+  );
+
+  // =====================================================
+  // DOCUMENTS DES RÉSERVATIONS
+  // =====================================================
+
+  if (bookingIds.length > 0) {
+    const {
+      data: bookingDocuments,
+      error: bookingDocumentsError,
+    } = await supabase
+      .from("booking_documents")
+      .select(
+        "id, booking_id, file_name, storage_path, created_at"
+      )
+      .in("booking_id", bookingIds);
+
+    if (bookingDocumentsError) {
+      console.error(
+        "Erreur chargement documents Booking :",
+        bookingDocumentsError.message
+      );
+    }
+
+    for (const document of bookingDocuments || []) {
+      const booking = bookingsById.get(
+        document.booking_id
+      );
+
+      // Le bucket est privé :
+      // on crée une URL temporaire valable 1 heure.
+      const { data: signedData, error: signedError } =
+        await supabase.storage
+          .from("booking-documents")
+          .createSignedUrl(
+            document.storage_path,
+            60 * 60
+          );
+
+      if (signedError) {
+        console.error(
+          "Erreur création URL document :",
+          signedError.message
+        );
+
+        continue;
+      }
+
+      allDocs.push({
+        id: `booking-doc-${document.id}`,
+        name:
+          document.file_name ||
+          booking?.name ||
+          "Document réservation",
+        url: signedData.signedUrl,
+        source: "Réservation",
+        relatedTitle:
+          booking?.name || "Réservation",
+        created_at: document.created_at,
+      });
+    }
+  }
+
+  // =====================================================
+  // TRI DU PLUS RÉCENT AU PLUS ANCIEN
+  // =====================================================
+
+  allDocs.sort(
+    (a, b) =>
+      new Date(b.created_at || 0).getTime() -
+      new Date(a.created_at || 0).getTime()
+  );
+
+  setDocuments(allDocs);
+  setLoading(false);
+}
 
   if (loading) return <p>Chargement...</p>;
 

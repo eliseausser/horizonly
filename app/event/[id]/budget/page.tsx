@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -28,6 +29,7 @@ export default function BudgetPage() {
   const [editLink, setEditLink] = useState("");
   const [editDocumentFile, setEditDocumentFile] = useState<File | null>(null);
 const [openItemMenuId, setOpenItemMenuId] = useState<string | null>(null);
+const [viewMode, setViewMode] = useState<"dashboard" | "list">("dashboard");
 
   useEffect(() => {
     loadData();
@@ -36,7 +38,7 @@ const [openItemMenuId, setOpenItemMenuId] = useState<string | null>(null);
   async function loadData() {
     const { data: eventData } = await supabase
       .from("events")
-      .select("budget_total")
+      .select("title, budget_total")
       .eq("id", id)
       .single();
 
@@ -99,11 +101,6 @@ async function uploadBudgetDocument(file: File) {
         title,
         category,
         amount: amount ? Number(amount) : 0,
-        paid,
-        notes: notes || null,
-        link: link || null,
-        document_url: uploadedDocument?.url || null,
-        document_name: uploadedDocument?.name || null,
       },
     ]);
 
@@ -115,10 +112,6 @@ async function uploadBudgetDocument(file: File) {
     setTitle("");
     setCategory("autre");
     setAmount("");
-    setPaid(false);
-    setNotes("");
-    setLink("");
-    setDocumentFile(null);
     setShowForm(false);
 
     await loadData();
@@ -129,10 +122,6 @@ async function uploadBudgetDocument(file: File) {
     setEditTitle(item.title || "");
     setEditCategory(item.category || "autre");
     setEditAmount(item.amount?.toString() || "");
-    setEditPaid(!!item.paid);
-    setEditNotes(item.notes || "");
-    setEditLink(item.link || "");
-    setEditDocumentFile(null);
   }
 
 async function updateItem(itemId: string) {
@@ -168,15 +157,6 @@ async function updateItem(itemId: string) {
       title: editTitle.trim(),
       category: editCategory,
       amount: newAmount,
-      paid: editPaid,
-      notes: editNotes || null,
-      link: editLink || null,
-      ...(uploadedDocument
-        ? {
-            document_url: uploadedDocument.url,
-            document_name: uploadedDocument.name,
-          }
-        : {}),
     })
     .eq("id", itemId);
 
@@ -273,349 +253,403 @@ const budgetStatusData = [
     value: Number(value),
   }));
 
-  return (
-    <div>
-      <h1>💰 Budget</h1>
+return (
+  <div style={{ padding: 20, background: "#F4F1EC" }}>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 15,
-          marginTop: 20,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={summaryCard}>
-          <h3>Budget total</h3>
-          <p>{totalBudget} €</p>
-        </div>
+    {/* HEADER */}
+    <div style={budgetHeader}>
+      <h1 style={budgetTitle}>
+        {event?.title || "Budget"}
+      </h1>
 
-        <div style={summaryCard}>
-          <h3>À payer</h3>
-          <p>{totalSpent} €</p>
-        </div>
+      <div style={budgetActions}>
+        <button
+          onClick={() => setViewMode("dashboard")}
+          style={
+            viewMode === "dashboard"
+              ? activeViewBtn
+              : smallBtn
+          }
+        >
+          Tableau de bord
+        </button>
 
-        <div style={summaryCard}>
-          <h3>Payé</h3>
-          <p>{totalPaid} €</p>
-        </div>
-
-        <div style={summaryCard}>
-          <h3>Restant</h3>
-          <p style={{ color: remaining < 0 ? "red" : "green" }}>
-            {remaining} €
-          </p>
-        </div>
-      </div>
-
-<div style={chartsGrid}>
-  {/* BUDGET TOTAL */}
-  <div style={chartCard}>
-    <h2>Budget total</h2>
-
-    <div
-      style={{
-        height: 280,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 48,
-          fontWeight: "bold",
-        }}
-      >
-        {totalBudget} €
-      </div>
-
-      <div
-        style={{
-          marginTop: 10,
-          color: "#666",
-        }}
-      >
-        Budget prévu
+        <button
+          onClick={() => setViewMode("list")}
+          style={
+            viewMode === "list"
+              ? activeViewBtn
+              : smallBtn
+          }
+        >
+          Dépenses
+        </button>
       </div>
     </div>
-  </div>
 
-  {/* BUDGET UTILISÉ */}
-  <div style={chartCard}>
-    <h2>Budget utilisé</h2>
+    {/* TABLEAU DE BORD */}
+    {viewMode === "dashboard" && (
+      <>
+        {/* RÉSUMÉ */}
+        <div
+          style={{
+            display: "flex",
+            gap: 15,
+            marginTop: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={summaryCard}>
+            <h3>Budget total</h3>
+            <p>{totalBudget} €</p>
+          </div>
 
-    <div
-      style={{
-        minHeight: 280,
-        display: "flex",
-        alignItems: "center",
-      }}
-    >
-      {totalBudget <= 0 ? (
-        <p>Aucun budget défini.</p>
-      ) : (
-        <PieChart
-  data={budgetStatusData}
-  total={totalBudget}
-  colorMode="budget"
-/>
-      )}
-    </div>
-  </div>
+          <div style={summaryCard}>
+            <h3>À payer</h3>
+            <p>{totalSpent-totalPaid} €</p>
+          </div>
 
-  {/* RÉPARTITION */}
-  <div style={chartCard}>
-    <h2>Répartition par catégorie</h2>
+          <div style={summaryCard}>
+            <h3>Payé</h3>
+            <p>{totalPaid} €</p>
+          </div>
 
-    <div
-      style={{
-        minHeight: 280,
-        display: "flex",
-        alignItems: "center",
-      }}
-    >
-      {pieData.length === 0 ? (
-        <p>Aucune dépense à afficher.</p>
-      ) : (
-        <PieChart
-          data={pieData}
-          total={totalSpent}
-        />
-      )}
-    </div>
-  </div>
-</div>
-      <button onClick={() => setShowForm(!showForm)} style={btn}>
-        Ajouter une dépense
-      </button>
-
-      {showForm && (
-        <div style={formCard}>
-          <h2>Nouvelle dépense</h2>
-
-          <input
-            placeholder="Titre"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={input}
-          />
-
-          <CategorySelect value={category} onChange={setCategory} />
-
-          <input
-            type="number"
-            placeholder="Montant"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            style={input}
-          />
-
-          <input
-            placeholder="Lien optionnel"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            style={input}
-          />
-
-          <input
-            type="file"
-            onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
-            style={input}
-          />
-
-          <textarea
-            placeholder="Notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            style={textarea}
-          />
-
-          <label style={{ display: "block", marginTop: 10 }}>
-            <input
-              type="checkbox"
-              checked={paid}
-              onChange={(e) => setPaid(e.target.checked)}
-            />{" "}
-            Payé
-          </label>
-
-          <button onClick={addItem} style={btn}>
-            Créer
-          </button>
+          <div style={summaryCard}>
+            <h3>Restant</h3>
+            <p
+              style={{
+                color: remaining < 0 ? "red" : "green",
+              }}
+            >
+              {remaining} €
+            </p>
+          </div>
         </div>
-      )}
 
-      <div style={{ marginTop: 25 }}>
-        {items.length === 0 ? (
-          <p>Aucune dépense pour le moment.</p>
-        ) : (
-          items.map((item) => (
+        {/* GRAPHIQUES */}
+        <div style={chartsGrid}>
+
+          {/* BUDGET TOTAL */}
+          <div style={chartCard}>
+            <h2>Budget total</h2>
+
             <div
-  key={item.id}
-  style={{
-    ...card,
-    borderLeft: `6px solid ${getActivityColor(item.category)}`,
-  }}
->
-              {editingId === item.id ? (
-                <div style={{ flex: 1 }}>
-                  <input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    style={input}
-                  />
+              style={{
+                height: 280,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 48,
+                  fontWeight: "bold",
+                }}
+              >
+                {totalBudget} €
+              </div>
 
-                  <CategorySelect
-                    value={editCategory}
-                    onChange={setEditCategory}
-                  />
+              <div
+                style={{
+                  marginTop: 10,
+                  color: "#666",
+                }}
+              >
+                Budget prévu
+              </div>
+            </div>
+          </div>
 
-                  <input
-                    type="number"
-                    value={editAmount}
-                    onChange={(e) => setEditAmount(e.target.value)}
-                    style={input}
-                  />
+          {/* BUDGET UTILISÉ */}
+          <div style={chartCard}>
+            <h2>Budget utilisé</h2>
 
-                  <input
-                    placeholder="Lien optionnel"
-                    value={editLink}
-                    onChange={(e) => setEditLink(e.target.value)}
-                    style={input}
-                  />
-
-                  <input
-                    type="file"
-                    onChange={(e) =>
-                      setEditDocumentFile(e.target.files?.[0] || null)
-                    }
-                    style={input}
-                  />
-
-                  <textarea
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    style={textarea}
-                  />
-
-                  <label style={{ display: "block", marginTop: 10 }}>
-                    <input
-                      type="checkbox"
-                      checked={editPaid}
-                      onChange={(e) => setEditPaid(e.target.checked)}
-                    />{" "}
-                    Payé
-                  </label>
-
-                  <button onClick={() => updateItem(item.id)} style={btn}>
-                    Enregistrer
-                  </button>
-
-                  <button onClick={() => setEditingId(null)} style={smallBtn}>
-                    Annuler
-                  </button>
-                </div>
+            <div
+              style={{
+                minHeight: 280,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {totalBudget <= 0 ? (
+                <p>Aucun budget défini.</p>
               ) : (
-                <>
-      <div style={{ flex: 1 }}>
-  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-    <h3 style={{ margin: 0 }}>{item.title}</h3>
-
-    {item.paid && (
-      <span style={paidBadge}>
-        Payé
-      </span>
-    )}
-  </div>
-
-  <span
-  style={{
-    ...badge,
-    background: getActivityColor(item.category),
-    color: "white",
-  }}
->
-  {getCategoryLabel(item.category)}
-</span>
-
-  <p>Montant : {item.amount} €</p>
-
-  {item.notes && <p>Notes : {item.notes}</p>}
-
-  {item.link && (
-    <p>
-      🔗{" "}
-      <a href={item.link} target="_blank" rel="noreferrer">
-        Voir le lien
-      </a>
-    </p>
-  )}
-
-  {item.document_url && (
-    <p>
-      📄{" "}
-      <a
-        href={item.document_url}
-        target="_blank"
-        rel="noreferrer"
-      >
-        {item.document_name || "Voir le document"}
-      </a>
-    </p>
-  )}
-</div>
-
-<div style={{ position: "relative" }}>
-  <button
-    onClick={() =>
-      setOpenItemMenuId(openItemMenuId === item.id ? null : item.id)
-    }
-    style={iconBtn}
-  >
-    ✏️
-  </button>
-
-  {openItemMenuId === item.id && (
-    <div style={miniMenu}>
-      <button
-        style={menuItem}
-        onClick={() => {
-          startEdit(item);
-          setOpenItemMenuId(null);
-        }}
-      >
-        Modifier
-      </button>
-
-      <button
-        style={menuItem}
-        onClick={() => {
-          togglePaid(item);
-          setOpenItemMenuId(null);
-        }}
-      >
-        {item.paid ? "Marquer non payé" : "Marquer payé"}
-      </button>
-
-      <button
-        style={{ ...menuItem, color: "red" }}
-        onClick={() => deleteItem(item.id)}
-      >
-        Supprimer
-      </button>
-    </div>
-  )}
-</div>
-                </>
+                <PieChart
+                  data={budgetStatusData}
+                  total={totalBudget}
+                  colorMode="budget"
+                />
               )}
             </div>
-          ))
+          </div>
+
+          {/* RÉPARTITION */}
+          <div style={chartCard}>
+            <h2>Répartition par catégorie</h2>
+
+            <div
+              style={{
+                minHeight: 280,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {pieData.length === 0 ? (
+                <p>Aucune dépense à afficher.</p>
+              ) : (
+                <PieChart
+                  data={pieData}
+                  total={totalSpent}
+                />
+              )}
+            </div>
+          </div>
+
+        </div>
+      </>
+    )}
+
+    {/* DÉPENSES */}
+    {viewMode === "list" && (
+      <>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          style={btn}
+        >
+          Ajouter une dépense
+        </button>
+
+        {showForm && (
+          <div style={formCard}>
+            <h2>Nouvelle dépense</h2>
+
+            <input
+              placeholder="Titre"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              style={input}
+            />
+
+            <CategorySelect
+              value={category}
+              onChange={setCategory}
+            />
+
+            <input
+              type="number"
+              placeholder="Montant"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              style={input}
+            />
+
+            <button onClick={addItem} style={btn}>
+              Créer
+            </button>
+          </div>
         )}
+
+        <div style={{ marginTop: 25 }}>
+          {items.length === 0 ? (
+            <p>Aucune dépense pour le moment.</p>
+          ) : (
+<>
+{items.map((item) => (
+  <div
+    key={item.id}
+    style={expenseCard}
+  >
+    {editingId === item.id ? (
+      /* =========================
+         MODE ÉDITION
+         ========================= */
+      <div style={{ flex: 1 }}>
+        <input
+          value={editTitle}
+          onChange={(e) =>
+            setEditTitle(e.target.value)
+          }
+          style={input}
+        />
+
+        <CategorySelect
+          value={editCategory}
+          onChange={setEditCategory}
+        />
+
+        <input
+          type="number"
+          value={editAmount}
+          onChange={(e) =>
+            setEditAmount(e.target.value)
+          }
+          style={input}
+        />
+
+   
+        <button
+          onClick={() => updateItem(item.id)}
+          style={btn}
+        >
+          Enregistrer
+        </button>
+
+        <button
+          onClick={() => setEditingId(null)}
+          style={smallBtn}
+        >
+          Annuler
+        </button>
       </div>
-    </div>
-  );
+    ) : (
+      <>
+        {/* CONTENU DE LA DÉPENSE */}
+        <div style={expenseContent}>
+
+          {/* LIGNE PRINCIPALE */}
+          <div style={expenseMainRow}>
+
+            {/* CATÉGORIE */}
+            <div
+              style={{
+                ...expenseCategoryBadge,
+                background: getActivityColor(
+                  item.category
+                ),
+              }}
+            >
+              {getCategoryLabel(item.category)}
+            </div>
+
+            {/* TITRE */}
+            <strong style={expenseTitle}>
+              {item.title || "Dépense"}
+            </strong>
+
+{/* MONTANT + PAYÉ */}
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    whiteSpace: "nowrap",
+  }}
+>
+  <span style={expenseAmount}>
+    {Number(item.amount || 0).toLocaleString(
+      "fr-FR"
+    )}{" "}
+    €
+  </span>
+
+  {item.paid && (
+    <span style={paidBadge}>
+      Payé
+    </span>
+  )}
+</div>
+          </div>
+
+          {/* NOTES */}
+          {item.notes?.trim() && (
+            <p style={expenseDescription}>
+              {item.notes}
+            </p>
+          )}
+
+          {/* LIEN */}
+          {item.link && (
+            <div style={expenseDocumentRow}>
+              <a
+                href={item.link}
+                target="_blank"
+                rel="noreferrer"
+                style={expenseLink}
+              >
+                Voir le lien
+              </a>
+            </div>
+          )}
+
+          {/* DOCUMENT */}
+          {item.document_url && (
+            <div style={expenseDocumentRow}>
+              <a
+                href={item.document_url}
+                target="_blank"
+                rel="noreferrer"
+                style={expenseLink}
+              >
+                {item.document_name ||
+                  "Voir le document"}
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* CRAYON À DROITE */}
+        <div
+          style={{
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            title="Modifier"
+            onClick={() => {
+              setOpenItemMenuId(
+                openItemMenuId === item.id
+                  ? null
+                  : item.id
+              );
+            }}
+            style={iconBtn}
+          >
+            <Pencil size={15} />
+          </button>
+
+          {openItemMenuId === item.id && (
+            <div style={miniMenu}>
+              <button
+                style={menuItem}
+                onClick={() => {
+                  startEdit(item);
+                  setOpenItemMenuId(null);
+                }}
+              >
+                Modifier
+              </button>
+
+              <button
+                style={{
+                  ...menuItem,
+                  color: "red",
+                }}
+                onClick={() => {
+                  deleteItem(item.id);
+                  setOpenItemMenuId(null);
+                }}
+              >
+                Supprimer
+              </button>
+            </div>
+          )}
+        </div>
+      </>
+    )}
+  </div>
+))}
+</>
+          )}
+        </div>
+      </>
+    )}
+
+  </div>
+);
 }
 
 function getCategoryLabel(type?: string | null) {
@@ -738,34 +772,47 @@ function PieChart({
       }}
     >
       <svg width="220" height="220" viewBox="0 0 200 200">
-        {data.map((slice) => {
-          const value = slice.value;
+{data.map((slice) => {
+  const value = slice.value;
 
-          const startPercent = cumulative / total;
-          cumulative += value;
-          const endPercent = cumulative / total;
+  const startPercent = cumulative / total;
+  cumulative += value;
+  const endPercent = cumulative / total;
 
-          const start = getCoordinates(startPercent);
-          const end = getCoordinates(endPercent);
+  // Cas particulier : une seule catégorie représente 100 %
+  if (value === total) {
+    return (
+      <circle
+        key={slice.category}
+        cx="100"
+        cy="100"
+        r="80"
+        fill={getSliceColor(slice.category)}
+      />
+    );
+  }
 
-          const largeArcFlag =
-            endPercent - startPercent > 0.5 ? 1 : 0;
+  const start = getCoordinates(startPercent);
+  const end = getCoordinates(endPercent);
 
-          const pathData = `
-            M 100 100
-            L ${start.x} ${start.y}
-            A 80 80 0 ${largeArcFlag} 1 ${end.x} ${end.y}
-            Z
-          `;
+  const largeArcFlag =
+    endPercent - startPercent > 0.5 ? 1 : 0;
 
-          return (
-            <path
-              key={slice.category}
-              d={pathData}
-              fill={getSliceColor(slice.category)}
-            />
-          );
-        })}
+  const pathData = `
+    M 100 100
+    L ${start.x} ${start.y}
+    A 80 80 0 ${largeArcFlag} 1 ${end.x} ${end.y}
+    Z
+  `;
+
+  return (
+    <path
+      key={slice.category}
+      d={pathData}
+      fill={getSliceColor(slice.category)}
+    />
+  );
+})}
       </svg>
 
       <div>
@@ -817,16 +864,6 @@ const formCard = {
   maxWidth: 420,
 };
 
-const card = {
-  marginTop: 15,
-  padding: 18,
-  border: "1px solid #ddd",
-  borderRadius: 12,
-  background: "white",
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 20,
-};
 
 const input = {
   display: "block",
@@ -857,26 +894,21 @@ const btn = {
 };
 
 const smallBtn = {
-  padding: "7px 12px",
-  border: "1px solid #ddd",
-  borderRadius: 8,
-  background: "white",
+  padding: "8px 12px",
+  border: "1px solid #DED8CE",
+  borderRadius: 10,
   cursor: "pointer",
-  marginTop: 8,
+  background: "#FAFAF8",
+  color: "#222222",
+  marginTop: 10,
+  height: 40,
+  boxSizing: "border-box" as const,
 };
 
 const actions = {
   display: "flex",
   flexDirection: "column" as const,
   gap: 8,
-};
-
-const badge = {
-  display: "inline-block",
-  padding: "5px 10px",
-  borderRadius: 999,
-  background: "#f1f1f1",
-  fontSize: 12,
 };
 
 const legendRow = {
@@ -924,6 +956,36 @@ const miniMenu = {
   zIndex: 20,
 };
 
+const budgetTitle = {
+  margin: 0,
+  fontSize: 34,
+  fontWeight: 800,
+  color: "#222222",
+};
+
+const budgetHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+  marginBottom: 24,
+};
+
+const budgetActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const activeViewBtn = {
+  ...smallBtn,
+  background: "#6E8570",
+  color: "#FAFAF8",
+  border: "1px solid #6E8570",
+  height: 40,
+  boxSizing: "border-box" as const,
+};
+
 const menuItem = {
   display: "block",
   width: "100%",
@@ -933,3 +995,67 @@ const menuItem = {
   textAlign: "left" as const,
   cursor: "pointer",
 };
+
+const expenseCard = {
+  marginTop: 12,
+  padding: 18,
+  borderRadius: 16,
+  border: "1px solid #DED8CE",
+  background: "#FAFAF8",
+  color: "#222222",
+  boxShadow: "0 10px 25px rgba(34,34,34,0.05)",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
+};
+
+const expenseContent = {
+  flex: 1,
+  minWidth: 0,
+};
+
+const expenseMainRow = {
+  display: "grid",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: 14,
+};
+
+const expenseCategoryBadge = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  color: "white",
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const,
+};
+
+const expenseTitle = {
+  fontSize: 16,
+  fontWeight: 700,
+  minWidth: 0,
+};
+
+const expenseAmount = {
+  fontSize: 16,
+  fontWeight: 700,
+  whiteSpace: "nowrap" as const,
+};
+
+const expenseDescription = {
+  margin: "10px 0 0",
+  color: "#666666",
+  fontSize: 14,
+};
+
+const expenseDocumentRow = {
+  marginTop: 8,
+  fontSize: 14,
+};
+
+const expenseLink = {
+  color: "#6E8570",
+  textDecoration: "none",
+};
+

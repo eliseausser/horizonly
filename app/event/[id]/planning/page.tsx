@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Grip, Pencil } from "lucide-react";
+import { Grip, Pencil, FileText } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { fr } from "date-fns/locale";
@@ -65,8 +65,8 @@ type Activity = {
   position: number;
   booking_id: string | null;
   price: number | null;
+  google_calendar_event_id: string | null;
   booking?: any;
-
 };
 
 type CalendarCreateSlot = {
@@ -125,9 +125,13 @@ export default function Planning() {
   const [description, setDescription] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPrice, setEditPrice] = useState("");
+  const [event, setEvent] = useState<any>(null);
 
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [openActivityMenuId, setOpenActivityMenuId] = useState<string | null>(null);
+  const [syncingGoogleCalendar, setSyncingGoogleCalendar] = useState(false);
+
+const [googleCalendarMessage, setGoogleCalendarMessage] = useState("");
 
   const startHour = 0;
   const endHour = 24;
@@ -194,6 +198,18 @@ export default function Planning() {
       setLoading(false);
       return;
     }
+
+const { data: eventData, error: eventError } = await supabase
+  .from("events")
+  .select("title")
+  .eq("id", eventId)
+  .maybeSingle();
+
+if (eventError) {
+  console.error("event load error:", eventError.message);
+} else {
+  setEvent(eventData);
+}
 
     const { data: activitiesData, error: activitiesError } = await supabase
       .from("activities")
@@ -465,77 +481,131 @@ if (activeType === "day") {
     }
   }
 
-  async function addActivity(dayId: string) {
-    if (!activityTitle.trim()) return;
+async function addActivity(dayId: string) {
+  if (!activityTitle.trim()) return;
 
-    const dayActivities = activitiesByDay[dayId] || [];
+  const dayActivities = activitiesByDay[dayId] || [];
 
-    const { data, error } = await supabase
-      .from("activities")
-.insert([
-  {
-    day_id: dayId,
-    title: activityTitle.trim(),
-    description: description.trim() || null,
-    type: activityType,
-    start_time: activityStart || null,
-    end_time: activityEnd || null,
-    position: dayActivities.length,
-    booking_id: selectedBookingId || null,
-    price: activityPrice ? Number(activityPrice) : null,
-  },
-])
-      .select()
-      .single();
+  const selectedBooking = bookings.find(
+    (booking) => booking.id === selectedBookingId
+  );
 
-    if (error) {
-      console.error("addActivity error:", error.message);
+  // Si une réservation est liée, son prix est prioritaire.
+  // Sinon on utilise le prix saisi dans l'activité.
+  const effectivePrice = selectedBooking
+    ? Number(selectedBooking.price || 0)
+    : Number(activityPrice || 0);
+
+  const { data, error } = await supabase
+    .from("activities")
+    .insert([
+      {
+        day_id: dayId,
+        title: activityTitle.trim(),
+        description: description.trim() || null,
+        type: activityType,
+        start_time: activityStart || null,
+        end_time: activityEnd || null,
+        position: dayActivities.length,
+        booking_id: selectedBookingId || null,
+
+        // Le prix de l'activité n'est utilisé que
+        // lorsqu'il n'y a pas de réservation.
+        price: activityPrice ? Number(activityPrice) : null,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error("addActivity error:", error.message);
+    return;
+  }
+
+  // Création d'une seule dépense avec le prix effectif
+  if (effectivePrice > 0) {
+    const { error: budgetError } = await supabase
+      .from("budget_items")
+      .insert([
+        {
+          event_id: eventId,
+          title: activityTitle.trim(),
+          amount: effectivePrice,
+          category: activityType,
+          activity_id: data.id,
+        },
+      ]);
+
+    if (budgetError) {
+      console.error(
+        "Erreur création dépense activité :",
+        budgetError.message
+      );
+    }
+  }
+
+  setActivities((prev) => [
+    ...prev,
+    {
+      ...data,
+      booking: selectedBooking || null,
+    },
+  ]);
+
+  setActivityTitle("");
+  setDescription("");
+  setActivityStart("");
+  setActivityEnd("");
+  setActivityType("activite");
+  setSelectedDay(null);
+  setSelectedBookingId("");
+  setActivityPrice("");
+}
+
+async function deleteActivity(activityId: string) {
+  const activity = activities.find(
+    (item) => item.id === activityId
+  );
+
+  if (!activity) return;
+
+  // Si l'activité existe dans Google Agenda,
+  // on enregistre sa suppression avant de la supprimer de MERGE.
+  if (activity.google_calendar_event_id) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      console.error(
+        "Impossible de récupérer l'utilisateur connecté."
+      );
       return;
     }
 
-if (activityPrice && Number(activityPrice) > 0) {
-  const { error: budgetError } = await supabase
-    .from("budget_items")
-    .insert([
-      {
-        event_id: eventId,
-        title: activityTitle.trim(),
-        amount: Number(activityPrice),
-	category: activityType,
-        activity_id: data.id,
-      },
-    ]);
+    const { error: pendingDeletionError } = await supabase
+      .from("google_calendar_pending_deletions")
+      .upsert(
+        {
+          user_id: user.id,
+          activity_id: activity.id,
+          google_calendar_event_id:
+            activity.google_calendar_event_id,
+        },
+        {
+          onConflict: "user_id,activity_id",
+        }
+      );
 
-  if (budgetError) {
-    console.error(
-      "Erreur création dépense activité :",
-      budgetError.message
-    );
-  }
-}
-
-const selectedBooking = bookings.find(
-  (booking) => booking.id === selectedBookingId
-);
-
-setActivities((prev) => [
-  ...prev,
-  {
-    ...data,
-    booking: selectedBooking || null,
-  },
-]);
-    setActivityTitle("");
-    setDescription("");
-    setActivityStart("");
-    setActivityEnd("");
-    setActivityType("activite");
-    setSelectedDay(null);
-    setSelectedBookingId("");
-    setActivityPrice("");
+    if (pendingDeletionError) {
+      console.error(
+        "Erreur enregistrement suppression Google Calendar :",
+        pendingDeletionError.message
+      );
+      return;
+    }
   }
 
-async function deleteActivity(activityId: string) {
   // 1. Supprimer la dépense liée à l'activité
   const { error: budgetError } = await supabase
     .from("budget_items")
@@ -547,6 +617,17 @@ async function deleteActivity(activityId: string) {
       "Erreur suppression dépense liée :",
       budgetError.message
     );
+
+    // Si la suppression de l'activité n'a finalement pas lieu,
+    // on retire la suppression Google mise en attente.
+    if (activity.google_calendar_event_id) {
+      await supabase
+        .from("google_calendar_pending_deletions")
+        .delete()
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id)
+        .eq("activity_id", activity.id);
+    }
+
     return;
   }
 
@@ -561,6 +642,23 @@ async function deleteActivity(activityId: string) {
       "deleteActivity Supabase error:",
       error.message
     );
+
+    // L'activité n'a pas été supprimée :
+    // on annule donc la suppression Google en attente.
+    if (activity.google_calendar_event_id) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        await supabase
+          .from("google_calendar_pending_deletions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("activity_id", activity.id);
+      }
+    }
+
     return;
   }
 
@@ -569,27 +667,122 @@ async function deleteActivity(activityId: string) {
     prev.filter((activity) => activity.id !== activityId)
   );
 }
+async function attachBookingToActivity(
+  activityId: string,
+  bookingId: string
+) {
+  const booking = bookings.find(
+    (item) => item.id === bookingId
+  );
 
-async function attachBookingToActivity(activityId: string, bookingId: string) {
-  const booking = bookings.find((item) => item.id === bookingId);
+  if (!booking) return;
 
+  const bookingPrice = Number(booking.price || 0);
+
+  // 1. Lier la réservation à l'activité
+  const { error: activityError } = await supabase
+    .from("activities")
+    .update({
+      booking_id: bookingId,
+    })
+    .eq("id", activityId);
+
+  if (activityError) {
+    console.error(
+      "attachBookingToActivity error:",
+      activityError.message
+    );
+    return;
+  }
+
+  // 2. Chercher une éventuelle dépense existante
+  const { data: existingBudgetItem, error: budgetSearchError } =
+    await supabase
+      .from("budget_items")
+      .select("id")
+      .eq("activity_id", activityId)
+      .maybeSingle();
+
+  if (budgetSearchError) {
+    console.error(
+      "Erreur recherche dépense :",
+      budgetSearchError.message
+    );
+    await loadData();
+    return;
+  }
+
+  // 3A. La réservation a un prix :
+  // mettre à jour ou créer la dépense
+  if (bookingPrice > 0) {
+    if (existingBudgetItem) {
+      const { error: budgetUpdateError } = await supabase
+        .from("budget_items")
+        .update({
+          amount: bookingPrice,
+        })
+        .eq("id", existingBudgetItem.id);
+
+      if (budgetUpdateError) {
+        console.error(
+          "Erreur mise à jour dépense :",
+          budgetUpdateError.message
+        );
+      }
+    } else {
+      const activity = activities.find(
+        (item) => item.id === activityId
+      );
+
+      const { error: budgetInsertError } = await supabase
+        .from("budget_items")
+        .insert([
+          {
+            event_id: eventId,
+            activity_id: activityId,
+            title: activity?.title || booking.name || "Réservation",
+            amount: bookingPrice,
+            category: activity?.type || booking.type || "autre",
+          },
+        ]);
+
+      if (budgetInsertError) {
+        console.error(
+          "Erreur création dépense :",
+          budgetInsertError.message
+        );
+      }
+    }
+  }
+
+  // 3B. La réservation n'a pas de prix :
+  // supprimer l'ancienne dépense de l'activité
+  if (bookingPrice <= 0 && existingBudgetItem) {
+    const { error: budgetDeleteError } = await supabase
+      .from("budget_items")
+      .delete()
+      .eq("id", existingBudgetItem.id);
+
+    if (budgetDeleteError) {
+      console.error(
+        "Erreur suppression dépense :",
+        budgetDeleteError.message
+      );
+    }
+  }
+
+  // 4. Mise à jour immédiate de l'affichage
   setActivities((prev) =>
     prev.map((activity) =>
       activity.id === activityId
-        ? { ...activity, booking_id: bookingId, booking }
+        ? {
+            ...activity,
+            booking_id: bookingId,
+            booking,
+          }
         : activity
     )
   );
-
-  const { error } = await supabase
-    .from("activities")
-    .update({ booking_id: bookingId })
-    .eq("id", activityId);
-
-  if (error) {
-    console.error(error.message);
-    await loadData();
-  }
 
   setBookingSearchActivityId(null);
 }
@@ -717,28 +910,113 @@ async function updateActivity(activityId: string) {
 }
 
 async function detachBookingFromActivity(activityId: string) {
+  const activity = activities.find(
+    (item) => item.id === activityId
+  );
+
+  if (!activity) return;
+
+  const activityPrice = Number(activity.price || 0);
+
+  // 1. Retirer la réservation
+  const { error: activityError } = await supabase
+    .from("activities")
+    .update({
+      booking_id: null,
+    })
+    .eq("id", activityId);
+
+  if (activityError) {
+    console.error(
+      "detachBookingFromActivity error:",
+      activityError.message
+    );
+    return;
+  }
+
+  // 2. Chercher la dépense existante
+  const { data: existingBudgetItem, error: budgetSearchError } =
+    await supabase
+      .from("budget_items")
+      .select("id")
+      .eq("activity_id", activityId)
+      .maybeSingle();
+
+  if (budgetSearchError) {
+    console.error(
+      "Erreur recherche dépense :",
+      budgetSearchError.message
+    );
+    return;
+  }
+
+  // 3. L'activité possède son propre prix
+  if (activityPrice > 0) {
+    if (existingBudgetItem) {
+      const { error: budgetUpdateError } = await supabase
+        .from("budget_items")
+        .update({
+          amount: activityPrice,
+          title: activity.title,
+          category: activity.type,
+        })
+        .eq("id", existingBudgetItem.id);
+
+      if (budgetUpdateError) {
+        console.error(
+          "Erreur mise à jour dépense :",
+          budgetUpdateError.message
+        );
+      }
+    } else {
+      const { error: budgetInsertError } = await supabase
+        .from("budget_items")
+        .insert([
+          {
+            event_id: eventId,
+            activity_id: activityId,
+            title: activity.title,
+            amount: activityPrice,
+            category: activity.type,
+          },
+        ]);
+
+      if (budgetInsertError) {
+        console.error(
+          "Erreur création dépense :",
+          budgetInsertError.message
+        );
+      }
+    }
+  }
+
+  // 4. Aucun prix activité -> aucune dépense
+  else if (existingBudgetItem) {
+    const { error: budgetDeleteError } = await supabase
+      .from("budget_items")
+      .delete()
+      .eq("id", existingBudgetItem.id);
+
+    if (budgetDeleteError) {
+      console.error(
+        "Erreur suppression dépense :",
+        budgetDeleteError.message
+      );
+    }
+  }
+
+  // 5. Mise à jour immédiate du Planning
   setActivities((prev) =>
-    prev.map((activity) =>
-      activity.id === activityId
+    prev.map((item) =>
+      item.id === activityId
         ? {
-            ...activity,
+            ...item,
             booking_id: null,
             booking: null,
           }
-        : activity
+        : item
     )
   );
-
-  const { error } = await supabase
-    .from("activities")
-    .update({ booking_id: null })
-    .eq("id", activityId);
-
-  if (error) {
-    console.error("detachBookingFromActivity error:", error.message);
-    await loadData();
-    return;
-  }
 
   setBookingSearchActivityId(null);
 }  
@@ -823,6 +1101,14 @@ async function createActivityFromCalendar() {
   const dayActivities =
     activitiesByDay[calendarCreateSlot.dayId] || [];
 
+  const selectedBooking = bookings.find(
+    (booking) => booking.id === selectedBookingId
+  );
+
+  const effectivePrice = selectedBooking
+    ? Number(selectedBooking.price || 0)
+    : Number(activityPrice || 0);
+
   const { data, error } = await supabase
     .from("activities")
     .insert([
@@ -835,6 +1121,7 @@ async function createActivityFromCalendar() {
         end_time: calendarCreateSlot.end,
         position: dayActivities.length,
         booking_id: selectedBookingId || null,
+
         price: activityPrice ? Number(activityPrice) : null,
       },
     ])
@@ -842,21 +1129,22 @@ async function createActivityFromCalendar() {
     .single();
 
   if (error) {
-    console.error("createActivityFromCalendar error:", error.message);
+    console.error(
+      "createActivityFromCalendar error:",
+      error.message
+    );
     return;
   }
 
-  // Si un prix a été renseigné,
-  // création automatique d'une dépense dans le budget
-  if (activityPrice && Number(activityPrice) > 0) {
+  if (effectivePrice > 0) {
     const { error: budgetError } = await supabase
       .from("budget_items")
       .insert([
         {
           event_id: eventId,
           title: activityTitle.trim(),
-          amount: Number(activityPrice),
-	  category: activityType,
+          amount: effectivePrice,
+          category: activityType,
           activity_id: data.id,
         },
       ]);
@@ -868,10 +1156,6 @@ async function createActivityFromCalendar() {
       );
     }
   }
-
-  const selectedBooking = bookings.find(
-    (booking) => booking.id === selectedBookingId
-  );
 
   setActivities((prev) => [
     ...prev,
@@ -1071,6 +1355,92 @@ async function createActivityFromCalendar() {
     };
   }
 
+async function syncWithGoogleCalendar() {
+  setGoogleCalendarMessage("");
+  setSyncingGoogleCalendar(true);
+
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      setGoogleCalendarMessage(
+        "Tu dois être connectée à MERGE."
+      );
+      return;
+    }
+
+    const timeZone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const response = await fetch(
+      "/api/google-calendar/sync",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId,
+          timeZone,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "Erreur synchronisation Google Agenda :",
+        data
+      );
+
+      if (data.needsGoogleConnection) {
+        setGoogleCalendarMessage(
+          "Google Agenda doit être reconnecté."
+        );
+      } else {
+        setGoogleCalendarMessage(
+          data.error ||
+            "Impossible de synchroniser Google Agenda."
+        );
+      }
+
+      return;
+    }
+
+setGoogleCalendarMessage(
+  `${data.created} créé(s), ` +
+    `${data.updated} mis à jour, ` +
+    `${data.deleted} supprimé(s)` +
+    (data.skipped
+      ? `, ${data.skipped} ignoré(s)`
+      : "") +
+    (data.errors
+      ? `, ${data.errors} erreur(s)`
+      : "") +
+    "."
+);
+
+    // Recharge pour récupérer les google_calendar_event_id
+    await loadData();
+  } catch (error) {
+    console.error(
+      "Erreur synchronisation Google Agenda :",
+      error
+    );
+
+    setGoogleCalendarMessage(
+      "Une erreur est survenue pendant la synchronisation."
+    );
+  } finally {
+    setSyncingGoogleCalendar(false);
+  }
+}
+
   async function exportPlanningPDF() {
     const html2pdf = (await import("html2pdf.js")).default;
     const element = document.getElementById("planning-export");
@@ -1099,26 +1469,89 @@ async function createActivityFromCalendar() {
   if (loading) return <p>Chargement...</p>;
 
   return (
-    <div style={{ padding: 20, background: "#F4F1EC" }}>
-      <div style={{ display: "flex", gap: 10, marginTop: 15 }}>
-        <button
-          onClick={() => setViewMode("list")}
-          style={viewMode === "list" ? activeViewBtn : smallBtn}
-        >
-          Vue liste
-        </button>
+    <div style={{ padding: 20, background: "#F4F1EC" }}><div style={planningHeader}>
+  <h1 style={planningTitle}>
+    {event?.title || "Planning"}
+  </h1>
 
-        <button
-          onClick={() => setViewMode("calendar")}
-          style={viewMode === "calendar" ? activeViewBtn : smallBtn}
-        >
-          Vue calendrier
-        </button>
+  <div style={planningActions}>
+    <button
+      onClick={() => setViewMode("list")}
+      style={viewMode === "list" ? activeViewBtn : smallBtn}
+    >
+      Vue liste
+    </button>
 
-        <button onClick={exportPlanningPDF} style={smallBtn}>
-          Exporter en PDF
-        </button>
-      </div>
+    <button
+      onClick={() => setViewMode("calendar")}
+      style={viewMode === "calendar" ? activeViewBtn : smallBtn}
+    >
+      Vue calendrier
+    </button>
+
+<button
+  onClick={syncWithGoogleCalendar}
+  disabled={syncingGoogleCalendar}
+  style={{
+    ...smallBtn,
+    opacity: syncingGoogleCalendar ? 0.6 : 1,
+    cursor: syncingGoogleCalendar
+      ? "not-allowed"
+      : "pointer",
+    padding: "6px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+  title={
+    syncingGoogleCalendar
+      ? "Synchronisation en cours..."
+      : "Synchroniser avec Google Agenda"
+  }
+>
+  <img
+    src="/google-calendar.svg"
+    alt="Google Agenda"
+    style={{
+      width: "22px",
+      height: "22px",
+    }}
+  />
+</button>
+
+<button
+  onClick={exportPlanningPDF}
+  style={{
+    ...smallBtn,
+    width: 40,
+    padding: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+  title="Exporter en PDF"
+  aria-label="Exporter en PDF"
+>
+  <FileText size={18} strokeWidth={1.5} />
+</button>
+  </div>
+</div>
+
+{googleCalendarMessage && (
+  <div
+    style={{
+      marginBottom: 14,
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: "#FAFAF8",
+      border: "1px solid rgba(110,133,112,0.25)",
+      color: "#557058",
+      fontSize: 13,
+    }}
+  >
+    {googleCalendarMessage}
+  </div>
+)}
 
       <div id="planning-export">
         {viewMode === "list" && (
@@ -1145,7 +1578,26 @@ async function createActivityFromCalendar() {
                       >
                         <div style={{ ...card, position: "relative" }}>
                           <div style={dayHeader}>
-                            <span style={dayTitle}>Jour {index + 1}</span>
+                            <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  }}
+>
+  <span style={dayTitle}>
+    Jour {index + 1}
+  </span>
+
+  <input
+    type="date"
+    value={day.date || ""}
+    onChange={(event) =>
+      updateDayDate(day.id, event.target.value)
+    }
+    style={dayDateInput}
+  />
+</div>
 
                             <div style={dayActions}>
                               <button
@@ -1171,15 +1623,6 @@ async function createActivityFromCalendar() {
                               </button>
                             </div>
                           </div>
-
-                          <input
-                            type="date"
-                            value={day.date || ""}
-                            onChange={(event) =>
-                              updateDayDate(day.id, event.target.value)
-                            }
-                            style={input}
-                          />
 
                           <SortableContext
                             items={dayActivities.map((activity) => activity.id)}
@@ -2368,6 +2811,8 @@ const smallBtn = {
   background: "#FAFAF8",
   color: "#222222",
   marginTop: 10,
+  height: 40,
+  boxSizing: "border-box" as const,
 };
 
 const input = {
@@ -2394,6 +2839,8 @@ const activeViewBtn = {
   background: "#6E8570",
   color: "#FAFAF8",
   border: "1px solid #6E8570",
+  height: 40,
+  boxSizing: "border-box" as const,
 };
 
 const dragOverlayCard = {
@@ -3004,4 +3451,35 @@ const bookingResultMeta = {
   fontSize: 11,
   fontWeight: 400,
   color: "#8A8A7A",
+};
+
+const planningHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+  marginBottom: 24,
+};
+
+const planningTitle = {
+  margin: 0,
+  fontSize: 34,
+  fontWeight: 800,
+  color: "#222222",
+};
+
+const planningActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const dayDateInput = {
+  border: "none",
+  background: "transparent",
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: "pointer",
+  padding: 0,
+  outline: "none",
 };

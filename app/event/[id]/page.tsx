@@ -287,6 +287,10 @@ function BudgetPie({ used, total }: { used: number; total: number }) {
 
 const header = {
   marginBottom: 24,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 20,
 };
 
 const title = {
@@ -297,8 +301,9 @@ const title = {
 };
 
 const typeBadge = {
-  display: "inline-block",
-  marginTop: 10,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   padding: "6px 12px",
   borderRadius: 999,
   background: "#6E8570",
@@ -306,6 +311,7 @@ const typeBadge = {
   fontSize: 13,
   fontWeight: 700,
   textTransform: "capitalize" as const,
+  flexShrink: 0,
 };
 
 const overviewGrid = {
@@ -382,7 +388,7 @@ const activityBadge = {
 const page = {
   minHeight: "100vh",
   background: "#F4F1EC",
-  padding: "40px",
+  padding: "10px 40px 40px",
   color: "#222222",
 };
 

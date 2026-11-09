@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Pencil, Trash2, Calendar, Clock, Link as LinkIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function TodoPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params.id as string;
 
+  const [event, setEvent] = useState<any>(null);
   const [lists, setLists] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
 
@@ -37,22 +40,45 @@ export default function TodoPage() {
   const [editTaskComment, setEditTaskComment] = useState("");
 
   useEffect(() => {
-    loadData();
+    if (id) loadData();
   }, [id]);
 
   async function loadData() {
-    const { data: listsData } = await supabase
+    // Événement (adapte le nom de la table si besoin)
+    const { data: eventData } = await supabase
+      .from("events")
+      .select("title")
+      .eq("id", id)
+      .maybeSingle();
+
+    setEvent(eventData);
+
+    // Listes de cet événement
+    const { data: listsData, error: listsError } = await supabase
       .from("todo_lists")
       .select("*")
       .eq("event_id", id)
       .order("created_at", { ascending: true });
 
+    if (listsError) return console.error("loadLists error:", listsError.message);
+
     setLists(listsData || []);
 
-    const { data: tasksData } = await supabase
+    // Tâches uniquement des listes de cet événement
+    const listIds = (listsData || []).map((l) => l.id);
+
+    if (listIds.length === 0) {
+      setTasks([]);
+      return;
+    }
+
+    const { data: tasksData, error: tasksError } = await supabase
       .from("todo_tasks")
       .select("*")
+      .in("list_id", listIds)
       .order("created_at", { ascending: true });
+
+    if (tasksError) return console.error("loadTasks error:", tasksError.message);
 
     setTasks(tasksData || []);
   }
@@ -115,6 +141,11 @@ export default function TodoPage() {
   }
 
   async function deleteList(listId: string) {
+    if (!window.confirm("Supprimer cette liste et toutes ses tâches ?")) return;
+
+    // Supprime d'abord les tâches (utile si pas de ON DELETE CASCADE en base)
+    await supabase.from("todo_tasks").delete().eq("list_id", listId);
+
     const { error } = await supabase
       .from("todo_lists")
       .delete()
@@ -122,6 +153,7 @@ export default function TodoPage() {
 
     if (error) return console.error("deleteList error:", error.message);
 
+    setOpenListMenuId(null);
     await loadData();
   }
 
@@ -175,10 +207,12 @@ export default function TodoPage() {
   }
 
   async function toggleTask(task: any) {
-    await supabase
+    const { error } = await supabase
       .from("todo_tasks")
       .update({ done: !task.done })
       .eq("id", task.id);
+
+    if (error) return console.error("toggleTask error:", error.message);
 
     await loadData();
   }
@@ -191,30 +225,27 @@ export default function TodoPage() {
 
     if (error) return console.error("deleteTask error:", error.message);
 
+    setOpenTaskMenuId(null);
     await loadData();
   }
 
   return (
-    <div>
-      <button onClick={() => setShowListForm(!showListForm)} style={btn}>
-        Créer une liste
-      </button>
+    <div style={{ padding: 20, background: "#F4F1EC" }}>
+      {/* HEADER */}
+      <div style={todoHeader}>
+        <h1 style={todoTitle}>{event?.title || "To-do"}</h1>
+
+        <button onClick={() => setShowListForm(!showListForm)} style={btn}>
+          Créer une liste
+        </button>
+      </div>
 
       {showListForm && (
         <div style={formCard}>
-          <h2>Nouvelle liste</h2>
-
           <input
             placeholder="Nom de la liste"
             value={listTitle}
             onChange={(e) => setListTitle(e.target.value)}
-            style={input}
-          />
-
-          <input
-            placeholder="Type / catégorie"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
             style={input}
           />
 
@@ -228,6 +259,7 @@ export default function TodoPage() {
         </div>
       )}
 
+      {/* LISTES */}
       <div style={{ marginTop: 25 }}>
         {lists.length === 0 ? (
           <p>Aucune liste pour le moment.</p>
@@ -274,13 +306,13 @@ export default function TodoPage() {
                   {!isEditingList && (
                     <div style={{ position: "relative" }}>
                       <button
-                        onClick={() =>
-                          setOpenListMenuId(openListMenuId === list.id ? null : list.id)
-                        }
-                        style={iconBtn}
-                      >
-                        ✏️
-                      </button>
+  onClick={() =>
+    setOpenListMenuId(openListMenuId === list.id ? null : list.id)
+  }
+  style={iconBtn}
+>
+  <Pencil size={16} />
+</button>
 
                       {openListMenuId === list.id && (
                         <div style={miniMenu}>
@@ -306,6 +338,7 @@ export default function TodoPage() {
                   )}
                 </div>
 
+                {/* TÂCHES */}
                 <div style={{ marginTop: 15 }}>
                   {listTasks.length === 0 ? (
                     <p style={{ opacity: 0.6 }}>Aucune tâche</p>
@@ -321,7 +354,7 @@ export default function TodoPage() {
                                 <label style={taskLabel}>
                                   <input
                                     type="checkbox"
-                                    checked={task.done}
+                                    checked={!!task.done}
                                     onChange={() => toggleTask(task)}
                                   />
 
@@ -336,30 +369,36 @@ export default function TodoPage() {
                                   </span>
                                 </label>
 
-                                <div style={taskMeta}>
-                                  {task.date && <span>📅 {task.date}</span>}
-                                  {task.time && <span>⏰ {task.time}</span>}
-                                  {task.link && (
-                                    <a href={task.link} target="_blank" rel="noreferrer">
-                                      🔗 Lien
-                                    </a>
-                                  )}
-                                </div>
+<div style={taskMeta}>
+  {task.date && (
+    <span style={metaItem}>
+      <Calendar size={14} /> {task.date}
+    </span>
+  )}
+  {task.time && (
+    <span style={metaItem}>
+      <Clock size={14} /> {task.time}
+    </span>
+  )}
+  {task.link && (
+    <a href={task.link} target="_blank" rel="noreferrer" style={metaItem}>
+      <LinkIcon size={14} /> Lien
+    </a>
+  )}
+</div>
 
                                 {task.comment && <p style={comment}>{task.comment}</p>}
                               </div>
 
                               <div style={{ position: "relative" }}>
-                                <button
-                                  onClick={() =>
-                                    setOpenTaskMenuId(
-                                      openTaskMenuId === task.id ? null : task.id
-                                    )
-                                  }
-                                  style={iconBtn}
-                                >
-                                  ✏️
-                                </button>
+<button
+  onClick={() =>
+    setOpenListMenuId(openListMenuId === list.id ? null : list.id)
+  }
+  style={iconBtn}
+>
+  <Pencil size={16} />
+</button>
 
                                 {openTaskMenuId === task.id && (
                                   <div style={miniMenu}>
@@ -503,6 +542,7 @@ export default function TodoPage() {
   );
 }
 
+
 const formCard = {
   padding: 20,
   border: "1px solid #ddd",
@@ -598,28 +638,11 @@ const taskLabel = {
   gap: 8,
 };
 
-const taskMeta = {
-  display: "flex",
-  gap: 12,
-  marginTop: 6,
-  fontSize: 13,
-  color: "#666",
-};
-
 const comment = {
   marginTop: 6,
   marginBottom: 0,
   color: "#555",
   fontSize: 14,
-};
-
-const iconBtn = {
-  width: 34,
-  height: 34,
-  border: "1px solid #ddd",
-  borderRadius: 8,
-  background: "white",
-  cursor: "pointer",
 };
 
 const miniMenu = {
@@ -635,12 +658,56 @@ const miniMenu = {
   zIndex: 20,
 };
 
+const iconBtn = {
+  width: 34,
+  height: 34,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid #ddd",
+  borderRadius: 8,
+  background: "white",
+  cursor: "pointer",
+};
+
 const menuItem = {
-  display: "block",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
   width: "100%",
   padding: "9px 12px",
   border: "none",
   background: "white",
   textAlign: "left" as const,
   cursor: "pointer",
+};
+
+const todoTitle = {
+  margin: 0,
+  fontSize: 34,
+  fontWeight: 800,
+  color: "#222222",
+};
+
+const todoHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+  marginBottom: 24,
+};
+
+const taskMeta = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  marginTop: 6,
+  fontSize: 13,
+  color: "#666",
+};
+
+const metaItem = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
 };

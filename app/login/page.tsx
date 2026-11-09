@@ -17,20 +17,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function loginWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`,
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
+async function loginWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}/dashboard`,
+      scopes:
+        "https://www.googleapis.com/auth/calendar.events.owned",
+      queryParams: {
+        access_type: "offline",
+        prompt: "consent",
       },
-    });
+    },
+  });
 
-    if (error) setMessage(error.message);
-  }
+  if (error) setMessage(error.message);
+}
 
   async function loginWithEmail() {
     setMessage("");

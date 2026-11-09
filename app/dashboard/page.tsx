@@ -361,10 +361,13 @@ function renderEventCard(event: any) {
 
   if (loading) return <p>Chargement...</p>;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
-  const ongoingEvents = events.filter((event) => {
+// PROJETS EN COURS
+// Ceux qui se terminent le plus tôt apparaissent en premier
+const ongoingEvents = events
+  .filter((event) => {
     if (!event.start_date || !event.end_date) return true;
 
     const start = new Date(event.start_date);
@@ -374,24 +377,54 @@ function renderEventCard(event: any) {
     end.setHours(0, 0, 0, 0);
 
     return start <= today && end >= today;
+  })
+  .sort((a, b) => {
+    if (!a.end_date && !b.end_date) return 0;
+    if (!a.end_date) return 1;
+    if (!b.end_date) return -1;
+
+    return (
+      new Date(a.end_date).getTime() -
+      new Date(b.end_date).getTime()
+    );
   });
 
-  const upcomingEvents = events.filter((event) => {
+
+// PROJETS À VENIR
+// Le prochain projet apparaît en premier
+const upcomingEvents = events
+  .filter((event) => {
     if (!event.start_date) return false;
 
     const start = new Date(event.start_date);
     start.setHours(0, 0, 0, 0);
 
     return start > today;
+  })
+  .sort((a, b) => {
+    return (
+      new Date(a.start_date).getTime() -
+      new Date(b.start_date).getTime()
+    );
   });
 
-  const pastEvents = events.filter((event) => {
+
+// PROJETS TERMINÉS
+// Le projet terminé le plus récemment apparaît en premier
+const pastEvents = events
+  .filter((event) => {
     if (!event.end_date) return false;
 
     const end = new Date(event.end_date);
     end.setHours(0, 0, 0, 0);
 
     return end < today;
+  })
+  .sort((a, b) => {
+    return (
+      new Date(b.end_date).getTime() -
+      new Date(a.end_date).getTime()
+    );
   });
 
 const hasProjects =
@@ -408,7 +441,6 @@ return (
     marginBottom: 30,
   }}
 >
-  <h1 style={{ margin: 0 }}>Mes projets</h1>
 
   <button onClick={() => setShowForm(true)} style={btn}>
     Nouveau projet
