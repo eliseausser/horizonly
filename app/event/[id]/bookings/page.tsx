@@ -156,7 +156,8 @@ async function uploadBookingDocuments(
       }
 
       const { data: publicUrlData } = supabase.storage
-        .from("booking-documents")
+  .from("booking-documents")
+  .getPublicUrl(storagePath);
 
       const { error: documentError } = await supabase
   .from("booking_documents")
@@ -164,7 +165,7 @@ async function uploadBookingDocuments(
     {
       booking_id: bookingId,
       file_name: file.name,
-      file_url: "",
+      file_url: publicUrlData.publicUrl,
       storage_path: storagePath,
     },
   ]);
